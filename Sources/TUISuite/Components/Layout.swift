@@ -92,6 +92,91 @@ public struct Rows : Component {
     }
 }
 
+public struct LayoutModifierComponent : Component {
+    let alignment: Alignment
+    let position: Position
+    let widthLayout: LayoutDimension
+    let heightLayout: LayoutDimension
+    let content: Component
+
+    public init(aligment: Alignment = .left,position:Position = .top,widthLayout: LayoutDimension = .flex,heightLayout: LayoutDimension = .flex,content: Component) {
+        self.alignment = aligment
+        self.position = position
+        self.content = content
+        self.widthLayout = widthLayout
+        self.heightLayout = heightLayout
+    }
+    
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        let width = switch widthLayout {
+        case .fixed(let int):
+            int
+        case .percentage(let p):
+            max(0,Int(Double(bounds.width)*p))
+        case .flex:
+            bounds.width
+        }
+        
+        let height = switch heightLayout {
+        case .fixed(let int):
+            int
+        case .percentage(let p):
+            max(0,Int(Double(bounds.width)*p))
+        case .flex:
+            bounds.height
+        }
+        
+        let x = switch alignment {
+        case .left:
+            bounds.x
+        case .right:
+            max(0,bounds.x+bounds.width - width)
+        case .center:
+            max(0,bounds.x+(bounds.width - width)/2)
+        }
+
+        let y = switch position {
+        case .top:
+            bounds.y
+        case .bottom:
+            max(0,bounds.y+bounds.height - height)
+        case .middle:
+            max(0,bounds.y+(bounds.height - height)/2)
+        }
+        content.render(renderer:renderer,bounds:Rect(x:x,y:y,width:width,height:height),context:context)
+    }
+}
+
+public extension Component {
+    func layout(alignment:Alignment?=nil,position:Position?=nil,width:LayoutDimension?=nil,height:LayoutDimension?=nil) -> LayoutModifierComponent {
+        let base : LayoutModifierComponent
+        if let layoutModifier = self as? LayoutModifierComponent {
+            base = layoutModifier
+        } else {
+            base = LayoutModifierComponent(content: self)
+        }
+        return LayoutModifierComponent(
+            aligment: alignment ?? base.alignment,
+            position: position ?? base.position,
+            widthLayout: width ?? base.widthLayout,
+            heightLayout: height ?? base.heightLayout,
+            content: base.content)
+    }
+    
+    func width(_ width: LayoutDimension) -> LayoutModifierComponent {
+        layout(width:width)
+    }
+    func height(_ height: LayoutDimension) -> LayoutModifierComponent {
+        layout(height:height)
+    }
+    func alignment(_ alignment: Alignment) -> LayoutModifierComponent {
+        layout(alignment: alignment)
+    }
+    func position(_ position: Position) -> LayoutModifierComponent {
+        layout(position: position)
+    }
+}
+
 
 
 

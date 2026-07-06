@@ -64,11 +64,26 @@ public enum Color : Equatable {
     }
 }
 
+public struct Modifier : OptionSet, Equatable, Sendable {
+    public let rawValue: UInt8
+    public init(rawValue: UInt8) { self.rawValue = rawValue }
+
+    public static let none = Modifier([])
+    public static let bold = Modifier(rawValue:1 << 0)
+    public static let dim = Modifier(rawValue:1 << 1)
+    public static let italic = Modifier(rawValue:1 << 2)
+    public static let underline = Modifier(rawValue:1 << 3)
+    public static let blink = Modifier(rawValue:1 << 4)
+    public static let reverse = Modifier(rawValue:1 << 5)
+    public static let strikethrough = Modifier(rawValue:1 << 6)
+
+}
+
 struct Cell : Equatable {
     var char: UInt32 = 32
     var fg: Color = .ansi16(15)
     var bg: Color = .ansi16(0)
-    var modifiers: UInt8 = 0
+    var modifiers: Modifier = .none
 }
 
 struct TerminalSize {
@@ -157,7 +172,7 @@ public final class Renderer {
             char: 32,                 // ASCII Space
             fg: .ansi16(15),     // Default white
             bg: .ansi16(0),      // Default black
-            modifiers: 0              // No styles active
+            modifiers: .none              // No styles active
         )
             
         // Use standard contiguous assignment optimization to overwrite memory arrays safely
@@ -180,7 +195,7 @@ public final class Renderer {
         
         var activeFg : Color? = nil
         var activeBg : Color? = nil
-        var activeMod: UInt8? = nil
+        var activeMod: Modifier? = nil
         
         for y in 0..<height {
             let offset = y*width
@@ -202,8 +217,19 @@ public final class Renderer {
                     activeBg = nil
                     activeMod = cell.modifiers
                     
-                    if((cell.modifiers & 1) != 0) { appendString(&output,"\u{001B}[1m"); }
-                    if((cell.modifiers & 2) != 0) { appendString(&output,"\u{001B}[4m") }
+                    let mods = cell.modifiers
+                    if !mods.isEmpty {
+                        var codes = [String]()
+                        if mods.contains(.bold)          { codes.append("1")  }
+                        if mods.contains(.dim)           { codes.append("2") }
+                        if mods.contains(.italic)        { codes.append("3") }
+                        if mods.contains(.underline)     { codes.append("4") }
+                        if mods.contains(.blink)         { codes.append("5") }
+                        if mods.contains(.reverse)       { codes.append("7") }
+                        if mods.contains(.strikethrough) { codes.append("9") }
+                        appendString(&output,"\u{001B}[\(codes.joined(separator: ";"))m")
+                    }
+                    
                 }
                 
                 if activeFg != cell.fg {
@@ -261,7 +287,7 @@ extension Renderer {
         Rect(x: 0, y: 0, width: width, height: height)
     }}
     
-    public func fill(_ scalar: UnicodeScalar, x:Int,y:Int,width:Int,height:Int,fg:Color,bg:Color,modifiers:UInt8 = 0) {
+    public func fill(_ scalar: UnicodeScalar, x:Int,y:Int,width:Int,height:Int,fg:Color,bg:Color,modifiers:Modifier = .none) {
         guard x >= 0 && y >= 0 && x < width && y < height else { return }
         for j in y..<y+height {
             let offset = j*self.width
@@ -276,7 +302,7 @@ extension Renderer {
     }
     
     
-    public func drawChar(_ scalar: UnicodeScalar,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:UInt8 = 0) {
+    public func drawChar(_ scalar: UnicodeScalar,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:Modifier = .none) {
         guard x >= 0 && y >= 0 && x < width && y < height else {
             return
         }
@@ -291,7 +317,7 @@ extension Renderer {
         backBuffer[index].modifiers = modifiers
     }
     
-    public func drawString(_ text: String,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:UInt8 = 0) {
+    public func drawString(_ text: String,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:Modifier = .none) {
         guard y >= 0 && y < height else { return }
         let offset = y*width
         let scalars = text.unicodeScalars

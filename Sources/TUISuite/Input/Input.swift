@@ -1,19 +1,19 @@
 import Foundation
 
-enum InputEvent : Equatable {
+public enum InputEvent : Equatable {
     case key(Character)
     case controlKey(ControlKey)
     case mouse(MouseEvent)
     case unknown
 }
 
-enum MouseEvent : Equatable {
+public enum MouseEvent : Equatable {
     case press(button:Int,x:Int,y:Int)
     case release(button:Int,x:Int,y:Int)
     case drag(button:Int,x:Int,y:Int)
 }
 
-enum ControlKey : Equatable {
+public enum ControlKey : Equatable {
     case up, down, left, right
     case escape, enter, backspace, tab
 }

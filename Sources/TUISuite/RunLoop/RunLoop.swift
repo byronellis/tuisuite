@@ -13,7 +13,7 @@ func setupCrashTraps() {
 public struct RunLoop {
     
     
-    public static func run(fps : Double = 60.0, _ body: (Renderer) -> Void) {
+    public static func run(fps : Double = 60.0, _ body: (Renderer,InputEvent?) -> Void) {
         setupCrashTraps()
         
         let renderer = Renderer()
@@ -31,17 +31,20 @@ public struct RunLoop {
         while isRunning {
             let startTime = CFAbsoluteTimeGetCurrent()
             
+            var frameEvent: InputEvent?
             if(input.waitForInput(timeout: targetFrameTime)) {
                 while let event = input.poll() {
                     switch event {
                     case .controlKey(.escape):
                         isRunning = false
                     default:
-                        break
+                        frameEvent = event
                     }
                 }
             }
-            renderer.render(body)
+            renderer.render {
+                body($0,frameEvent)
+            }
             let elaspsedTime = CFAbsoluteTimeGetCurrent() - startTime
             if elaspsedTime < targetFrameTime {
                 let remaining_sleep = targetFrameTime - elaspsedTime
