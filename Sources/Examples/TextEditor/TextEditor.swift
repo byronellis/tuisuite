@@ -4,35 +4,65 @@ import TUISuite
 struct TextEditor {
     let theme : Theme = .santaCruz
 
-    @State(id:"configMenu")
-    var configMenu:Int = 1
-    
-    @MainActor
     func run() {
         let app = Application {
-            Rows([.fixed(1),.flex,.fixed(1)]) {
-                Label("Configuration",alignment:.center)
-                Columns([.fixed(22),.flex]) {
-                    Panel() {
-                        Rows([.fixed(3),.flex,.fixed(2)]) {
-                            Menu($configMenu) {
-                                MenuItem("Providers...",id:0)
-                                MenuItem("Agents...",id:1)
-                                MenuItem("Routing...",id:2)
-                            }
-                            Empty()
-                            Menu($configMenu) {
-                                MenuItem("Save and Exit",id:3)
-                                MenuItem("Cancel and Exit",id:4)
-                            }
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Text("Configuration")
+                            Spacer()
                         }
+                        .background()
+                        .frame(height:.fixed(1)).reverse()
+                        HStack {
+                            VStack {
+                                HStack(spacing:0) {
+                                    Text("[P]").foreground(.ansi16(2))
+                                    Text("roviders")
+                                }
+                                HStack(spacing:0) {
+                                    Text("[A]").foreground(.ansi16(2))
+                                    Text("gents")
+                                }
+                                HStack(spacing:0) {
+                                    Text("[R]").foreground(.ansi16(2))
+                                    Text("outing")
+                                }
+                                Spacer()
+                                HStack(spacing:0) {
+                                    Text("[S]").foreground(.ansi16(2))
+                                    Text("ave and Exit")
+                                }
+                                HStack(spacing:0) {
+                                    Text("[C]").foreground(.ansi16(2))
+                                    Text("ancel and Exit")
+                                }
+                            }.border(color:.ansi16(15)).frame(width:.fixed(22))
+                            VStack {
+                                Text("Content")
+                                Spacer()
+                            }.border(color:.ansi16(15))
+                        }
+
+                        HStack(spacing:1) {
+                            Text("First")
+                            Text("Second")
+                            Spacer()
+                            Text("Third")
+                        }
+                        .background()
+                        .frame(height:.fixed(1)).reverse()
                     }
-                    Panel() { Empty() }.modifier([.dim])
+                    .frame(width:.fixed(80),height:.fixed(24))
+                 //   .border(color:.ansi16(15))
+                    Spacer()
                 }
-                StatusBar("Hints").reverse()
-            }
-            .attribute(fg:.ansi16(15),bg:.ansi16(0))
-            .layout(alignment:.center,position:.middle,width:.fixed(80),height:.fixed(24))
+                Spacer()
+            }.foreground(.ansi16(15)).background(.ansi16(0))
         }
         app.run()
     }

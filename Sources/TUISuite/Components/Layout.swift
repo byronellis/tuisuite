@@ -1,182 +1,385 @@
+public enum Alignment {
+    case leading,center,trailing
+}
+
+public enum VerticalAlignment {
+    case top,middle,bottom
+}
+
 public enum LayoutDimension {
     case fixed(Int)
     case percentage(Double)
     case flex
 }
 
-public struct Columns : Component {
-    private let widths: [LayoutDimension]
-    private let children: [Component]
-    public init(_ widths:[LayoutDimension], @ComponentBuilder _ children: () -> [Component]) {
-        self.widths = widths
-        self.children = children()
+public struct Spacer : Component {
+    private let minLength: Int
+    
+    public init(minLength: Int = 0) {
+        self.minLength = minLength
     }
-    public func render(renderer: Renderer, bounds: Rect, context: Context) {
-        let totalWidth = bounds.width
-        var allocatedWidth = 0
-        var flexCount = 0
-        var computedWidths = [Int](repeating:0,count:children.count)
-        for (i,dim) in widths.enumerated() {
-            guard i < children.count else { break }
-            switch dim {
-            case .fixed(let w):
-                computedWidths[i] = min(w,totalWidth - allocatedWidth)
-                allocatedWidth += computedWidths[i]
-            case .percentage(let p):
-                let w = Int(Double(totalWidth)*p)
-                computedWidths[i] = min(w,totalWidth - allocatedWidth)
-                allocatedWidth += computedWidths[i]
-            case .flex:
-                flexCount += 1
-            }
-        }
-        if flexCount > 0 && allocatedWidth < totalWidth {
-            let flexWidth = (totalWidth - allocatedWidth) / flexCount
-            for (i,dim) in widths.enumerated() {
-                guard i < children.count else { break }
-                if case .flex = dim {
-                    computedWidths[i] = flexWidth
-                }
-            }
-        }
-        var x = bounds.x
-        for (i,child) in children.enumerated() {
-            let childBounds = Rect(x:x,y:bounds.y,width:computedWidths[i],height:bounds.height)
-            child.render(renderer:renderer,bounds:childBounds,context:context)
-            x += computedWidths[i]
-        }
-    }
-}
-
-public struct Rows : Component {
-    private let heights: [LayoutDimension]
-    private let children: [Component]
-    public init(_ heights:[LayoutDimension], @ComponentBuilder _ children: () -> [Component]) {
-        self.heights = heights
-        self.children = children()
-    }
-    public func render(renderer: Renderer, bounds: Rect, context: Context) {
-        let totalHeight = bounds.height
-        var allocatedHeight = 0
-        var flexCount = 0
-        var computedHeights = [Int](repeating:0,count:children.count)
-        for (i,dim) in heights.enumerated() {
-            guard i < children.count else { break }
-            switch dim {
-            case .fixed(let w):
-                computedHeights[i] = min(w,totalHeight - allocatedHeight)
-                allocatedHeight += computedHeights[i]
-            case .percentage(let p):
-                let w = Int(Double(totalHeight)*p)
-                computedHeights[i] = min(w,totalHeight - allocatedHeight)
-                allocatedHeight += computedHeights[i]
-            case .flex:
-                flexCount += 1
-            }
-        }
-        if flexCount > 0 && allocatedHeight < totalHeight {
-            let flexWidth = (totalHeight - allocatedHeight) / flexCount
-            for (i,dim) in heights.enumerated() {
-                guard i < children.count else { break }
-                if case .flex = dim {
-                    computedHeights[i] = flexWidth
-                }
-            }
-        }
-        var y = bounds.y
-        for (i,child) in children.enumerated() {
-            let childBounds = Rect(x:bounds.x,y:y,width:bounds.width,height:computedHeights[i])
-            child.render(renderer:renderer,bounds:childBounds,context:context)
-            y += computedHeights[i]
-        }
-    }
-}
-
-public struct LayoutModifierComponent : Component {
-    let alignment: Alignment
-    let position: Position
-    let widthLayout: LayoutDimension
-    let heightLayout: LayoutDimension
-    let content: Component
-
-    public init(aligment: Alignment = .left,position:Position = .top,widthLayout: LayoutDimension = .flex,heightLayout: LayoutDimension = .flex,content: Component) {
-        self.alignment = aligment
-        self.position = position
-        self.content = content
-        self.widthLayout = widthLayout
-        self.heightLayout = heightLayout
+    
+    public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
+        // Expand to fill proposed width/height, or fall back to minLength
+        Size(minWidth:minLength,idealWidth:minLength,maxWidth:nil,
+             minHeight:minLength,idealHeight:minLength,maxHeight:nil)
     }
     
     public func render(renderer: Renderer, bounds: Rect, context: Context) {
-        let width = switch widthLayout {
-        case .fixed(let int):
-            int
-        case .percentage(let p):
-            max(0,Int(Double(bounds.width)*p))
-        case .flex:
-            bounds.width
-        }
-        
-        let height = switch heightLayout {
-        case .fixed(let int):
-            int
-        case .percentage(let p):
-            max(0,Int(Double(bounds.width)*p))
-        case .flex:
-            bounds.height
-        }
-        
-        let x = switch alignment {
-        case .left:
-            bounds.x
-        case .right:
-            max(0,bounds.x+bounds.width - width)
-        case .center:
-            max(0,bounds.x+(bounds.width - width)/2)
-        }
-
-        let y = switch position {
-        case .top:
-            bounds.y
-        case .bottom:
-            max(0,bounds.y+bounds.height - height)
-        case .middle:
-            max(0,bounds.y+(bounds.height - height)/2)
-        }
-        content.render(renderer:renderer,bounds:Rect(x:x,y:y,width:width,height:height),context:context)
+        // Spacers are invisible empty cells!
     }
 }
 
-public extension Component {
-    func layout(alignment:Alignment?=nil,position:Position?=nil,width:LayoutDimension?=nil,height:LayoutDimension?=nil) -> LayoutModifierComponent {
-        let base : LayoutModifierComponent
-        if let layoutModifier = self as? LayoutModifierComponent {
-            base = layoutModifier
-        } else {
-            base = LayoutModifierComponent(content: self)
-        }
-        return LayoutModifierComponent(
-            aligment: alignment ?? base.alignment,
-            position: position ?? base.position,
-            widthLayout: width ?? base.widthLayout,
-            heightLayout: height ?? base.heightLayout,
-            content: base.content)
+public struct VStack : Component {
+    private let alignment:Alignment
+    private let spacing:Int
+    private let children: [Component]
+    public init(alignment: Alignment = .center,spacing: Int = 0,@ComponentBuilder _ children: () -> [Component]) {
+        self.alignment = alignment
+        self.spacing = spacing
+        self.children = children()
     }
     
-    func width(_ width: LayoutDimension) -> LayoutModifierComponent {
-        layout(width:width)
+    public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
+        var minW = 0; var idealW = 0; var maxW: Int? = 0
+        var minH = 0; var idealH = 0; var maxH: Int? = 0
+         
+        let totalSpacing = max(0, children.count - 1) * spacing
+         
+        for (i, child) in children.enumerated() {
+            context.push("v_\(i)")
+            let childProf = child.sizeThatFits(proposal: proposal, context: context)
+            context.pop()
+            
+            
+            minW = max(minW, childProf.minWidth)
+            idealW = max(idealW, childProf.idealWidth)
+            if maxW != nil, let cmw = childProf.maxWidth { maxW = max(maxW!, cmw) } else { maxW = nil }
+            
+            minH += childProf.minHeight
+            idealH += childProf.idealHeight
+            if maxH != nil, let cmh = childProf.maxHeight { maxH! += cmh } else { maxH = nil }
+        }
+         
+        return Size(
+            minWidth: minW, idealWidth: idealW, maxWidth: maxW,
+            minHeight: minH + totalSpacing, idealHeight: idealH + totalSpacing, maxHeight: maxH.map { $0 + totalSpacing }
+        )
     }
-    func height(_ height: LayoutDimension) -> LayoutModifierComponent {
-        layout(height:height)
-    }
-    func alignment(_ alignment: Alignment) -> LayoutModifierComponent {
-        layout(alignment: alignment)
-    }
-    func position(_ position: Position) -> LayoutModifierComponent {
-        layout(position: position)
+    
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        let totalSpacing = max(0, children.count - 1) * spacing
+        var remainingHeight = bounds.height - totalSpacing
+            
+        var childProfiles = [Size](repeating: .fixed(width: 0, height: 0), count: children.count)
+        var allocatedHeights = [Int](repeating: 0, count: children.count)
+
+        var unallocatedIndices = [Int]()
+        var expandingIndices = [Int]()
+
+        for (i, child) in children.enumerated() {
+            context.push("v_\(i)")
+            let childProfile = child.sizeThatFits(proposal: .init(width: bounds.width, height: remainingHeight),context: context)
+            childProfiles[i] = childProfile
+            context.pop()
+            
+            allocatedHeights[i] = childProfile.minHeight
+            remainingHeight -= childProfile.minHeight
+            
+            if childProfile.maxHeight == nil {
+                expandingIndices.append(i)
+            } else if childProfile.idealHeight > childProfile.minHeight {
+                unallocatedIndices.append(i)
+            }
+        }
+        
+        if remainingHeight > 0 && !unallocatedIndices.isEmpty {
+            let sorted = unallocatedIndices.sorted {
+                (childProfiles[$0].idealHeight - childProfiles[$0].minHeight) < (childProfiles[$1].idealHeight - childProfiles[$1].minHeight)
+            }
+            var remaining = sorted.count
+            for i in sorted {
+                let childProfile = childProfiles[i]
+                let needed = childProfile.idealHeight - childProfile.minHeight
+                let available = remainingHeight / remaining
+                let allocation = min(needed,available)
+                allocatedHeights[i] += allocation
+                remainingHeight -= allocation
+                remaining -= 1
+                if remainingHeight <= 0 {
+                    break
+                }
+            }
+        }
+        
+        if remainingHeight > 0 && !expandingIndices.isEmpty {
+            let amount = remainingHeight / expandingIndices.count
+            var remainder = remainingHeight % expandingIndices.count
+            for i in expandingIndices {
+                let extra = remainder > 0 ? 1 : 0
+                remainder -= extra
+                allocatedHeights[i] += amount + extra
+            }
+        }
+        
+        var yOffset = bounds.y
+        for (i,child) in children.enumerated() {
+            context.push("v_\(i)")
+            let height = allocatedHeights[i]
+            let childProfile = childProfiles[i]
+            
+            guard yOffset < bounds.y + bounds.height else {
+                context.pop()
+                break
+            }
+            
+            let finalWidth = if childProfile.maxWidth == nil {
+                bounds.width
+            } else {
+                min(childProfile.idealWidth,bounds.width)
+            }
+            let xOffset = switch alignment {
+            case .leading: bounds.x
+            case .center: bounds.x + min(0,(bounds.width - finalWidth) / 2)
+            case .trailing: bounds.x + min(0,(bounds.width - finalWidth))
+            }
+            
+            child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:finalWidth,height:height),context:context)
+            yOffset += height + spacing
+            context.pop()
+        }
     }
 }
 
+public struct HStack : Component {
+    private let alignment:VerticalAlignment
+    private let spacing:Int
+    private let children: [Component]
+    public init(alignment: VerticalAlignment = .middle,spacing: Int = 0,@ComponentBuilder _ children: () -> [Component]) {
+        self.alignment = alignment
+        self.spacing = spacing
+        self.children = children()
+    }
+    public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
+        var minW = 0; var idealW = 0; var maxW: Int? = 0
+        var minH = 0; var idealH = 0; var maxH: Int? = 0
+        
+        let totalSpacing = max(0, children.count - 1) * spacing
+        
+        for (i, child) in children.enumerated() {
+            context.push("h_\(i)")
+            let childProf = child.sizeThatFits(proposal: proposal, context: context)
+            context.pop()
+            
+            minW += childProf.minWidth
+            idealW += childProf.idealWidth
+            if maxW != nil, let cmw = childProf.maxWidth { maxW! += cmw } else { maxW = nil }
+            
+            minH = max(minH, childProf.minHeight)
+            idealH = max(idealH, childProf.idealHeight)
+            if maxH != nil, let cmh = childProf.maxHeight { maxH = max(maxH!, cmh) } else { maxH = nil }
+        }
+        
+        return Size(
+            minWidth: minW + totalSpacing, idealWidth: idealW + totalSpacing, maxWidth: maxW.map { $0 + totalSpacing },
+            minHeight: minH, idealHeight: idealH, maxHeight: maxH
+        )
+   }
+    
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        let totalSpacing = max(0, children.count - 1) * spacing
+        var remainingWidth = bounds.width - totalSpacing
+        
+        var childProfiles = [Size](repeating: .fixed(width: 0, height: 0), count: children.count)
+        var allocatedWidths = [Int](repeating: 0, count: children.count)
+        
+        var unallocatedIndices = [Int]()
+        var expandingIndices = [Int]()
+        
+        for (i, child) in children.enumerated() {
+            context.push("h_\(i)")
+            let childProfile = child.sizeThatFits(proposal: .init(width:remainingWidth,height:bounds.height), context: context)
+            childProfiles[i] = childProfile
+            context.pop()
+            
+            allocatedWidths[i] = childProfile.minWidth
+            remainingWidth -= childProfile.minWidth
+            
+            if childProfile.maxWidth == nil {
+                expandingIndices.append(i)
+            } else if childProfile.idealWidth > childProfile.minWidth {
+                unallocatedIndices.append(i)
+            }
+        }
+        
 
+        
+        //Try to allocate remaining space to items that have an ideal width larger than
+        //than their minimum width
+        if remainingWidth > 0 && !unallocatedIndices.isEmpty {
+            let sorted = unallocatedIndices.sorted {
+                (childProfiles[$0].idealWidth - childProfiles[$0].minWidth) < (childProfiles[$1].idealWidth - childProfiles[$1].minWidth)
+            }
+            var remaining = sorted.count
+            for i in sorted {
+                let childProfile = childProfiles[i]
+                let needed = childProfile.idealWidth - childProfile.minWidth
+                let available = remainingWidth / remaining
+                let allocation = min(needed,available)
+                allocatedWidths[i] += allocation
+                remainingWidth -= allocation
+                remaining -= 1
+                if remainingWidth <= 0 {
+                    break
+                }
+            }
+        }
+        
+        
+        //Any remaining width can go to flex elements like spacers
+        if remainingWidth > 0 && !expandingIndices.isEmpty {
+            let amount = remainingWidth / expandingIndices.count
+            var remainder = remainingWidth % expandingIndices.count
+            for i in expandingIndices {
+                let extra = remainder > 0 ? 1 : 0
+                remainder -= extra
+                allocatedWidths[i] += amount + extra
+            }
+        }
+        
+        var xOffset = bounds.x
+        for (i,child) in children.enumerated() {
+            context.push("h_\(i)")
+            let width = allocatedWidths[i]
+            let childProfile = childProfiles[i]
+            
+            guard xOffset < bounds.x + bounds.width else {
+                context.pop()
+                break
+            }
+            
+            let finalHeight = if childProfile.maxHeight == nil {
+                bounds.height
+            } else {
+                min(childProfile.idealHeight,bounds.height)
+            }
+            let yOffset = switch alignment {
+            case .top: bounds.y
+            case .middle: bounds.y + min(0,(bounds.height - finalHeight) / 2)
+            case .bottom: bounds.y + min(0,(bounds.height - finalHeight))
+            }
+            
+            child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:width,height:finalHeight),context:context)
+            xOffset += width + spacing
+            
+            context.pop()
+        }
+    }
+    
+}
 
+public struct PaddingLayout: Component {
+    public var top: Int
+    public var leading: Int
+    public var bottom: Int
+    public var trailing: Int
+    public var child: Component
+    
+    // ==========================================
+    // PASS 1: PROFILE MEASUREMENT
+    // ==========================================
+    public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
+        let horizontalPadding = leading + trailing
+        let verticalPadding = top + bottom
+        
+        let proposedChildWidth = proposal.width.map { max(0, $0 - horizontalPadding) }
+        let proposedChildHeight = proposal.height.map { max(0, $0 - verticalPadding) }
+        let childProposal = ProposedSize(width: proposedChildWidth, height: proposedChildHeight)
+        
+        let childProfile = child.sizeThatFits(proposal: childProposal, context: context)
+        
+        return Size(
+            minWidth: childProfile.minWidth + horizontalPadding,
+            idealWidth: childProfile.idealWidth + horizontalPadding,
+            maxWidth: childProfile.maxWidth.map { $0 + horizontalPadding },
+            minHeight: childProfile.minHeight + verticalPadding,
+            idealHeight: childProfile.idealHeight + verticalPadding,
+            maxHeight: childProfile.maxHeight.map { $0 + verticalPadding }
+        )
+    }
+    
+    // ==========================================
+    // PASS 2: PAINT INSET RENDERING
+    // ==========================================
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        let insetBounds = Rect(
+            x: bounds.x + leading,
+            y: bounds.y + top,
+            width: max(0, bounds.width - (leading + trailing)),
+            height: max(0, bounds.height - (top + bottom))
+        )
+        child.render(renderer: renderer, bounds: insetBounds, context: context)
+    }
+}
 
+extension Component {
+    public func padding(_ length: Int = 1) -> Component {
+        return PaddingLayout(top: length, leading: length, bottom: length, trailing: length, child: self)
+    }
+    
+    public func padding(top: Int = 0, leading: Int = 0, bottom: Int = 0, trailing: Int = 0) -> Component {
+        return PaddingLayout(top: top, leading: leading, bottom: bottom, trailing: trailing, child: self)
+    }
+}
+
+public struct FrameLayoutModifier: Component {
+    public let width: LayoutDimension?
+    public let height: LayoutDimension?
+    public let child: Component
+    
+    public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
+        var baseProfile = child.sizeThatFits(proposal: proposal, context: context)
+        
+        // 1. Resolve Horizontal Overrides
+        if let wDim = width {
+            switch wDim {
+            case .fixed(let val):
+                baseProfile.minWidth = val; baseProfile.idealWidth = val; baseProfile.maxWidth = val
+            case .percentage(let pct):
+                if let proposedMaxX = proposal.width {
+                    let val = Int(Double(proposedMaxX) * pct)
+                    baseProfile.minWidth = val; baseProfile.idealWidth = val; baseProfile.maxWidth = val
+                }
+            case .flex:
+                baseProfile.maxWidth = nil // Allow infinite expansion
+            }
+        }
+        
+        // 2. Resolve Vertical Overrides
+        if let hDim = height {
+            switch hDim {
+            case .fixed(let val):
+                baseProfile.minHeight = val; baseProfile.idealHeight = val; baseProfile.maxHeight = val
+            case .percentage(let pct):
+                if let proposedMaxY = proposal.height {
+                    let val = Int(Double(proposedMaxY) * pct)
+                    baseProfile.minHeight = val; baseProfile.idealHeight = val; baseProfile.maxHeight = val
+                }
+            case .flex:
+                baseProfile.maxHeight = nil
+            }
+        }
+        
+        return baseProfile
+    }
+    
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        child.render(renderer: renderer, bounds: bounds, context: context)
+    }
+}
+
+extension Component {
+    public func frame(width: LayoutDimension? = nil, height: LayoutDimension? = nil) -> Component {
+        return FrameLayoutModifier(width: width, height: height, child: self)
+    }
+}
