@@ -17,12 +17,17 @@ public struct Rect {
     public let height:Int
 }
 
-public enum Color : Equatable {
+protocol ColorAppender {
+    func append(to stream: inout [UInt8],foreground:Bool)
+    func append(to stream: inout String,foreground:Bool)
+}
+
+public enum TerminalColor : ColorAppender,Equatable {
     case ansi16(UInt8)
     case xterm256(UInt8)
     case truecolor(r:UInt8,g:UInt8,b:UInt8)
     case transparent
-    
+
     func append(to stream: inout [UInt8],foreground:Bool = true) {
         switch self {
         case .ansi16(let code):
@@ -45,7 +50,7 @@ public enum Color : Equatable {
             appendString(&stream,foreground ? "\u{001B}[39m" : "\u{001B}[49m")
         }
     }
-    
+
     func append(to stream: inout String,foreground:Bool = true) {
         switch self {
         case .ansi16(let code):
@@ -62,6 +67,78 @@ public enum Color : Equatable {
             stream.append(foreground ? "\u{001B}[39m" : "\u{001B}[49m")
         }
     }
+
+}
+
+public enum SemanticColor {
+    case background, textPrimary, textSecondary, accent, error, border
+    
+    public var terminal: TerminalColor {
+        let activeTheme = ApplicationContext.shared.currentTheme
+        switch self {
+        case .background: return activeTheme.background
+        case .textPrimary: return activeTheme.textPrimary
+        case .textSecondary: return activeTheme.textSecondary
+        case .accent: return activeTheme.accent
+        case .error: return activeTheme.error
+        case .border: return activeTheme.border
+        }
+    }
+}
+
+public struct Color : ColorAppender {
+    private enum Storage {
+        case concrete(TerminalColor)
+        case semantic(SemanticColor)
+    }
+    
+    private let storage: Storage
+
+    public var terminal : TerminalColor {
+        switch storage {
+        case .concrete(let color): return color
+        case .semantic(let color): return color.terminal
+        }
+    }
+    
+    public static func ansi(_ color: TerminalColor) -> Color {
+        return Color(storage:.concrete(color))
+    }
+    public static func theme(_ color: SemanticColor) -> Color {
+        return Color(storage:.semantic(color))
+    }
+    
+
+    
+    func append(to stream: inout [UInt8],foreground:Bool = true) {
+        let color : TerminalColor = switch storage {
+        case .concrete(let color):color
+        case .semantic(let color):color.terminal
+        }
+        color.append(to: &stream,foreground:foreground)
+    }
+    
+    func append(to stream: inout String,foreground:Bool = true) {
+        let color : TerminalColor = switch storage {
+        case .concrete(let color):color
+        case .semantic(let color):color.terminal
+        }
+        color.append(to: &stream,foreground:foreground)
+    }
+    
+}
+
+public extension Color {
+    static func ansi16(_ color:UInt8) -> Color { Color.ansi(.ansi16(color)) }
+    static func xterm256(_ color:UInt8) -> Color { Color.ansi(.xterm256(color)) }
+    static var  transparent:Color { Color.ansi(.transparent) }
+    static var  background:Color { Color.theme(.background) }
+    static var  textPrimary:Color { Color.theme(.textPrimary) }
+    static var  textSecondary:Color { Color.theme(.textSecondary) }
+    static var  accent:Color { Color.theme(.accent) }
+    static var  error:Color { Color.theme(.error) }
+    static var  border:Color { Color.theme(.border) }
+    
 }
 
 public struct Modifier : OptionSet, Equatable, Sendable {
@@ -81,8 +158,8 @@ public struct Modifier : OptionSet, Equatable, Sendable {
 
 struct Cell : Equatable {
     var char: UInt32 = 32
-    var fg: Color = .ansi16(15)
-    var bg: Color = .ansi16(0)
+    var fg: TerminalColor = .ansi16(15)
+    var bg: TerminalColor = .ansi16(0)
     var modifiers: Modifier = .none
 }
 
@@ -193,8 +270,8 @@ public final class Renderer {
         var lastX = -1
         var lastY = -1
         
-        var activeFg : Color? = nil
-        var activeBg : Color? = nil
+        var activeFg : TerminalColor? = nil
+        var activeBg : TerminalColor? = nil
         var activeMod: Modifier? = nil
         
         for y in 0..<height {
@@ -287,7 +364,7 @@ extension Renderer {
         Rect(x: 0, y: 0, width: width, height: height)
     }}
     
-    public func fill(_ scalar: UnicodeScalar, x:Int,y:Int,width:Int,height:Int,fg:Color,bg:Color,modifiers:Modifier = .none) {
+    public func fill(_ scalar: UnicodeScalar, x:Int,y:Int,width:Int,height:Int,fg:TerminalColor,bg:TerminalColor,modifiers:Modifier = .none) {
         guard x >= 0 && y >= 0 && x < width && y < height else { return }
         for j in y..<y+height {
             let offset = j*self.width
@@ -302,7 +379,7 @@ extension Renderer {
     }
     
     
-    public func drawChar(_ scalar: UnicodeScalar,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:Modifier = .none) {
+    public func drawChar(_ scalar: UnicodeScalar,x:Int,y:Int,fg:TerminalColor = .transparent,bg:TerminalColor = .transparent,modifiers:Modifier = .none) {
         guard x >= 0 && y >= 0 && x < width && y < height else {
             return
         }
@@ -317,7 +394,7 @@ extension Renderer {
         backBuffer[index].modifiers = modifiers
     }
     
-    public func drawString(_ text: String,x:Int,y:Int,fg:Color = .transparent,bg:Color = .transparent,modifiers:Modifier = .none) {
+    public func drawString(_ text: String,x:Int,y:Int,fg:TerminalColor = .transparent,bg:TerminalColor = .transparent,modifiers:Modifier = .none) {
         guard y >= 0 && y < height else { return }
         let offset = y*width
         let scalars = text.unicodeScalars

@@ -1,11 +1,11 @@
 import Foundation
 import os
 
-public final class Application {
+public final class Application<Content:Component> {
     
-    private let rootBuilder: () -> Component
+    private let rootBuilder: () -> Content
     
-    public init(@ComponentBuilder _ builder: @escaping ()->Component) {
+    public init(@ComponentBuilder _ builder: @escaping ()->Content) {
         rootBuilder = builder
     }
     
@@ -14,6 +14,7 @@ public final class Application {
             let fullScreenBounds = renderer.bounds
             let rootComponent = rootBuilder()
             let context = Context(event:event)
+
             
             _ = rootComponent.sizeThatFits(proposal: .init(width: fullScreenBounds.width, height:fullScreenBounds.height), context: context)            
             rootComponent.render(renderer: renderer, bounds: renderer.bounds, context: .init(event:event))

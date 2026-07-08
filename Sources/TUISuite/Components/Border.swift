@@ -25,12 +25,14 @@ public struct BorderStyle : Sendable {
 
 }
 
-public struct BorderModifierComponent : Component {
+public struct BorderModifierComponent<Content:Component> : Component {
+    public typealias Body = Never
+    
     let color: Color
     let style: BorderStyle
-    let child: Component
+    let child: Content
     
-    public init(color: Color = .transparent,style:BorderStyle = .single,child: Component) {
+    public init(color: Color = .transparent,style:BorderStyle = .single,child: Content) {
         self.color = color
         self.style = style
         self.child = child
@@ -79,7 +81,7 @@ public struct BorderModifierComponent : Component {
 
 
 public extension Component {
-    func border(color:Color = .transparent, style: BorderStyle = .single) -> BorderModifierComponent {
+    func border(color:Color = .transparent, style: BorderStyle = .single) -> BorderModifierComponent<Self> {
         BorderModifierComponent(color: color,style: style,child:self)
     }
 }

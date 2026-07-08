@@ -3,6 +3,7 @@ private class Cache<T>  {
     init(_ value: T) { self.value = value }
 }
 public struct Text : Component {
+    public typealias Body = Never
     
     public var text: String
     public var lineLimit: Int?

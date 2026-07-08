@@ -1,10 +1,5 @@
 import Foundation
-public struct SantaCruz : Theme {
+public struct SantaCruz {
     
 }
 
-extension Theme where Self == SantaCruz {
-    public static var santaCruz: SantaCruz {
-        .init()
-    }
-}

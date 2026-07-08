@@ -10,6 +10,57 @@ func setupCrashTraps() {
     }
 }
 
+public final class ApplicationContext: @unchecked Sendable {
+    public static let shared = ApplicationContext()
+    
+    private var shutdownRequested: Bool = false
+    private var lock = os_unfair_lock()
+    
+    private var cachedDarkMode:Bool = false
+    private var lastChecked:CFTimeInterval = CFTimeInterval.nan
+    private var dark_lock = os_unfair_lock()
+    
+    private var darkModeTheme: Theme = Modern.Dark()
+    private var lightModeTheme: Theme = Modern.Light()
+    
+    private init() { }
+    
+    public var isShutdownRequested : Bool {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return shutdownRequested
+    }
+    
+    public func signalShutdown() {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        shutdownRequested = true
+    }
+    
+    public var darkMode : Bool {
+        let now = CFAbsoluteTimeGetCurrent()
+        if lastChecked == .nan || now - lastChecked > 60.0 {
+            os_unfair_lock_lock(&dark_lock)
+            defer { os_unfair_lock_unlock(&dark_lock) }
+            // Make sure we didn't get updated while waiting for the lock
+            if lastChecked == .nan || now - lastChecked > 60.0 {
+                cachedDarkMode = false
+                let globalDefaults = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)!
+                if let intefaceStyle = globalDefaults["AppleInterfaceStyle"] as? String {
+                    cachedDarkMode = intefaceStyle.caseInsensitiveCompare( "dark" ) == .orderedSame
+                }
+                lastChecked = now
+            }
+        }
+        return cachedDarkMode
+    }
+    
+    public var currentTheme: Theme {
+        darkMode ? darkModeTheme : lightModeTheme
+    }
+    
+}
+
 public struct RunLoop {
     
     
@@ -30,16 +81,23 @@ public struct RunLoop {
         renderer.clearBackBuffer()
         while isRunning {
             let startTime = CFAbsoluteTimeGetCurrent()
+            if ApplicationContext.shared.isShutdownRequested {
+                isRunning = false
+                break
+            }
             
             var frameEvent: InputEvent?
             if(input.waitForInput(timeout: targetFrameTime)) {
-                while let event = input.poll() {
+                if let event = input.poll() {
                     switch event {
-                    case .controlKey(.escape):
-                        isRunning = false
+                    case .key(let key):
+                        if key.key == .char("c") && key.modifiers.contains(.ctrl) {
+                            isRunning = false
+                        }
                     default:
-                        frameEvent = event
+                        break
                     }
+                    frameEvent = event
                 }
             }
             renderer.render {

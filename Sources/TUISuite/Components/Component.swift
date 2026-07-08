@@ -22,22 +22,42 @@ public struct ProposedSize : Equatable,Sendable {
 }
 
 public protocol Component {
+    associatedtype Body: Component
+    
+    var body : Self.Body { get }
     func sizeThatFits(proposal:ProposedSize, context: Context) -> Size
     func render(renderer: Renderer, bounds: Rect, context: Context)
 }
 
-
-
-
-@resultBuilder
-public struct ComponentBuilder {
-    public static func buildBlock(_ components: Component...) -> [Component] {
-        return components
+public extension Component {
+    func sizeThatFits(proposal:ProposedSize, context: Context) -> Size {
+        self.body.sizeThatFits(proposal: proposal, context: context)
     }
-    public static func buildBlock(_ component: Component) -> Component {
-        return component
+    func render(renderer: Renderer, bounds: Rect, context: Context) {
+        self.body.render(renderer:renderer,bounds:bounds,context:context)
     }
 }
+
+extension Never : Component {
+    public typealias Body = Never
+    
+    public var body : Never {
+        fatalError("Primitive components have no body.")
+    }
+    public func sizeThatFits(proposal:ProposedSize, context: Context) -> Size {
+        return .fixed(width:0,height:0)
+    }
+    public func render(renderer: Renderer, bounds: Rect, context: Context) {
+    }
+
+}
+
+extension Component where Self.Body == Never {
+    public var body : Never {
+        fatalError("Primitive components have no body.")
+    }
+}
+
 
 public struct Empty : Component {
     
@@ -51,3 +71,17 @@ public struct Empty : Component {
     }
 }
 
+
+@resultBuilder
+public struct ComponentBuilder {
+    public static func buildBlock<C:Component>(_ component: C) -> C {
+        return component
+    }
+    public static func buildExpression<C:Component>(_ component: C) -> C {
+        return component
+    }
+    public static func buildBlock<each C:Component>(_ components: repeat each C) -> TupleComponent<repeat each C> {
+        return TupleComponent((repeat each components))
+    }
+
+}

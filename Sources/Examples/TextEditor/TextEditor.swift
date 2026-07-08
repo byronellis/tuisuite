@@ -1,8 +1,46 @@
 import TUISuite
 
+struct ConfigurationMenu : Component {
+    public var body : some Component {
+        VStack {
+            HStack(spacing:0) {
+                Text("[").foreground(.textSecondary)
+                Text("P").foreground(.accent)
+                Text("]").foreground(.textSecondary)
+                Text("roviders")
+            }
+            HStack(spacing:0) {
+                Text("[").foreground(.textSecondary)
+                Text("A").foreground(.accent)
+                Text("]").foreground(.textSecondary)
+                Text("gents")
+            }
+            HStack(spacing:0) {
+                Text("[").foreground(.textSecondary)
+                Text("R").foreground(.accent)
+                Text("]").foreground(.textSecondary)
+                Text("outing")
+            }
+            Spacer()
+            HStack(spacing:0) {
+                Text("[").foreground(.textSecondary)
+                Text("S").foreground(.accent)
+                Text("]").foreground(.textSecondary)
+                Text("ave and Exit")
+            }
+            HStack(spacing:0) {
+                Text("[").foreground(.textSecondary)
+                Text("C").foreground(.accent)
+                Text("]").foreground(.textSecondary)
+                Text("ancel and Exit")
+            }
+        }.border(color:.border).frame(width:.fixed(22))
+    }
+}
+
+
 @main
 struct TextEditor {
-    let theme : Theme = .santaCruz
 
     func run() {
         let app = Application {
@@ -19,33 +57,11 @@ struct TextEditor {
                         .background()
                         .frame(height:.fixed(1)).reverse()
                         HStack {
-                            VStack {
-                                HStack(spacing:0) {
-                                    Text("[P]").foreground(.ansi16(2))
-                                    Text("roviders")
-                                }
-                                HStack(spacing:0) {
-                                    Text("[A]").foreground(.ansi16(2))
-                                    Text("gents")
-                                }
-                                HStack(spacing:0) {
-                                    Text("[R]").foreground(.ansi16(2))
-                                    Text("outing")
-                                }
-                                Spacer()
-                                HStack(spacing:0) {
-                                    Text("[S]").foreground(.ansi16(2))
-                                    Text("ave and Exit")
-                                }
-                                HStack(spacing:0) {
-                                    Text("[C]").foreground(.ansi16(2))
-                                    Text("ancel and Exit")
-                                }
-                            }.border(color:.ansi16(15)).frame(width:.fixed(22))
+                            ConfigurationMenu()
                             VStack {
                                 Text("Content")
                                 Spacer()
-                            }.border(color:.ansi16(15))
+                            }.border(color:.border)
                         }
 
                         HStack(spacing:1) {
@@ -58,11 +74,10 @@ struct TextEditor {
                         .frame(height:.fixed(1)).reverse()
                     }
                     .frame(width:.fixed(80),height:.fixed(24))
-                 //   .border(color:.ansi16(15))
                     Spacer()
                 }
                 Spacer()
-            }.foreground(.ansi16(15)).background(.ansi16(0))
+            }.foreground(.textPrimary).background(.background)
         }
         app.run()
     }

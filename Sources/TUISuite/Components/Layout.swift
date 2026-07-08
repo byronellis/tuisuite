@@ -13,6 +13,8 @@ public enum LayoutDimension {
 }
 
 public struct Spacer : Component {
+    public typealias Body = Never
+    
     private let minLength: Int
     
     public init(minLength: Int = 0) {
@@ -30,14 +32,23 @@ public struct Spacer : Component {
     }
 }
 
-public struct VStack : Component {
+public struct VStack<Content:Component> : Component {
+    public typealias Body = Never
+    
     private let alignment:Alignment
     private let spacing:Int
-    private let children: [Component]
-    public init(alignment: Alignment = .center,spacing: Int = 0,@ComponentBuilder _ children: () -> [Component]) {
+    private let children: [AnyComponent]
+    public init(alignment: Alignment = .center,spacing: Int = 0,@ComponentBuilder _ children: () -> Content) {
         self.alignment = alignment
         self.spacing = spacing
-        self.children = children()
+
+        let content = children()
+        if let tuple = content as? ComponentContainer {
+            self.children = tuple.children
+        } else {
+            self.children = [AnyComponent(content)]
+        }
+        
     }
     
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
@@ -151,14 +162,23 @@ public struct VStack : Component {
     }
 }
 
-public struct HStack : Component {
+public struct HStack<Content:Component> : Component {
+    public typealias Body = Never
+    
     private let alignment:VerticalAlignment
     private let spacing:Int
-    private let children: [Component]
-    public init(alignment: VerticalAlignment = .middle,spacing: Int = 0,@ComponentBuilder _ children: () -> [Component]) {
+    private let children: [AnyComponent]
+
+    public init(alignment: VerticalAlignment = .middle,spacing: Int = 0,@ComponentBuilder _ children: () -> Content) {
         self.alignment = alignment
         self.spacing = spacing
-        self.children = children()
+
+        let content = children()
+        if let tuple = content as? ComponentContainer {
+            self.children = tuple.children
+        } else {
+            self.children = [AnyComponent(content)]
+        }
     }
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
         var minW = 0; var idealW = 0; var maxW: Int? = 0
@@ -278,12 +298,14 @@ public struct HStack : Component {
     
 }
 
-public struct PaddingLayout: Component {
+public struct PaddingLayout<Content:Component>: Component {
+    public typealias Body = Never
+    
     public var top: Int
     public var leading: Int
     public var bottom: Int
     public var trailing: Int
-    public var child: Component
+    public var child: Content
     
     // ==========================================
     // PASS 1: PROFILE MEASUREMENT
@@ -323,19 +345,21 @@ public struct PaddingLayout: Component {
 }
 
 extension Component {
-    public func padding(_ length: Int = 1) -> Component {
+    public func padding(_ length: Int = 1) -> PaddingLayout<Self> {
         return PaddingLayout(top: length, leading: length, bottom: length, trailing: length, child: self)
     }
     
-    public func padding(top: Int = 0, leading: Int = 0, bottom: Int = 0, trailing: Int = 0) -> Component {
+    public func padding(top: Int = 0, leading: Int = 0, bottom: Int = 0, trailing: Int = 0) -> PaddingLayout<Self> {
         return PaddingLayout(top: top, leading: leading, bottom: bottom, trailing: trailing, child: self)
     }
 }
 
-public struct FrameLayoutModifier: Component {
+public struct FrameLayoutModifier<Content:Component>: Component {
+    public typealias Body = Never
+    
     public let width: LayoutDimension?
     public let height: LayoutDimension?
-    public let child: Component
+    public let child: Content
     
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
         var baseProfile = child.sizeThatFits(proposal: proposal, context: context)
@@ -379,7 +403,7 @@ public struct FrameLayoutModifier: Component {
 }
 
 extension Component {
-    public func frame(width: LayoutDimension? = nil, height: LayoutDimension? = nil) -> Component {
+    public func frame(width: LayoutDimension? = nil, height: LayoutDimension? = nil) -> FrameLayoutModifier<Self> {
         return FrameLayoutModifier(width: width, height: height, child: self)
     }
 }

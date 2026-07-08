@@ -1,6 +1,6 @@
 public final class Context {
-    public var fg: Color
-    public var bg: Color
+    public var fg: TerminalColor
+    public var bg: TerminalColor
     public var modifier: Modifier
     public let event: InputEvent?
     
@@ -8,7 +8,7 @@ public final class Context {
     private var id: String? = nil
     
     
-    public init(fg: Color = .transparent, bg: Color = .transparent, modifier: Modifier = .none,event: InputEvent? = nil) {
+    public init(fg: TerminalColor = .transparent, bg: TerminalColor = .transparent, modifier: Modifier = .none,event: InputEvent? = nil) {
         self.fg = fg
         self.bg = bg
         self.modifier = modifier
@@ -36,29 +36,31 @@ public final class Context {
         return ids.joined(separator: "/")
     }
     
-    public func override(fg:Color? = nil,bg:Color? = nil,modifier:Modifier? = nil) -> (Color,Color,Modifier) {
+    public func override(fg:TerminalColor? = nil,bg:TerminalColor? = nil,modifier:Modifier? = nil) -> (TerminalColor,TerminalColor,Modifier) {
         let original = (self.fg,self.bg,self.modifier)
         self.fg = fg ?? self.fg
         self.bg = bg ?? self.bg
         self.modifier = modifier ?? self.modifier
         return original
     }
-    public func restore(_ original:(Color,Color,Modifier)) {
+    public func restore(_ original:(TerminalColor,TerminalColor,Modifier)) {
         self.fg = original.0
         self.bg = original.1
         self.modifier = original.2
     }
 }
 
-public struct ContextModifierComponent : Component {
+public struct ContextModifierComponent<Content:Component> : Component {
+    public typealias Body = Never
+    
     let fg: Color?
     let bg: Color?
     let modifier: Modifier?
     let id: String?
     
-    let content: Component
+    let content: Content
     
-    public init(fg:Color? = nil,bg:Color? = nil,modifier: Modifier? = nil,id: String? = nil,content:Component) {
+    public init(fg:Color? = nil,bg:Color? = nil,modifier: Modifier? = nil,id: String? = nil,content:Content) {
         self.fg = fg
         self.bg = bg
         self.modifier = modifier
@@ -71,7 +73,11 @@ public struct ContextModifierComponent : Component {
     }
     
     public func render(renderer: Renderer,bounds:Rect,context:Context) {
-        let original = context.override(fg:fg,bg:bg == .transparent ? nil : bg,modifier:modifier)
+        let resolvedFg:TerminalColor? = fg?.terminal
+        let resolvedBg:TerminalColor? = bg?.terminal
+        
+        
+        let original = context.override(fg:resolvedFg == .transparent ? nil : resolvedFg,bg:resolvedBg == .transparent ? nil : resolvedBg,modifier:modifier)
         if bg != nil {
             for y in bounds.y..<bounds.y+bounds.height {
                 for x in bounds.x..<bounds.x+bounds.width {
@@ -86,9 +92,9 @@ public struct ContextModifierComponent : Component {
 
 
 public extension Component {
-    func attribute(fg:Color? = nil,bg:Color? = nil,modifier:Modifier? = nil) -> ContextModifierComponent {
-        let base: ContextModifierComponent
-        if let contextModifier = self as? ContextModifierComponent {
+    func attribute(fg:Color? = nil,bg:Color? = nil,modifier:Modifier? = nil) -> ContextModifierComponent<Self> {
+        let base: ContextModifierComponent<Self>
+        if let contextModifier = self as? ContextModifierComponent<Self> {
             base = contextModifier
         } else {
             base = ContextModifierComponent(content:self)
@@ -96,21 +102,23 @@ public extension Component {
         return ContextModifierComponent(fg: fg ?? base.fg,bg: bg ?? base.bg,modifier: modifier ?? base.modifier,content: base.content)
     }
     
-    func foreground(_ color: Color) -> ContextModifierComponent {
+    func foreground(_ color: Color) -> ContextModifierComponent<Self> {
         attribute(fg:color)
     }
-    func background(_ color: Color = .transparent) -> ContextModifierComponent {
+    func background(_ color: Color = .transparent) -> ContextModifierComponent<Self> {
         attribute(bg:color)
     }
-    func modifier(_ modifier: Modifier) -> ContextModifierComponent {
+    func modifier(_ modifier: Modifier) -> ContextModifierComponent<Self> {
         attribute(modifier: modifier)
     }
 }
 
-public struct ReverseModifierComponent : Component {
+public struct ReverseModifierComponent<Content:Component> : Component {
+    public typealias Body = Never
+
     
-    let content: Component
-    public init(content:Component) {
+    let content: Content
+    public init(content:Content) {
         self.content = content
     }
 
@@ -127,11 +135,8 @@ public struct ReverseModifierComponent : Component {
 }
 
 public extension Component {
-    func reverse() -> Component {
-        if let reverse = self as? ContextModifierComponent {
-            return reverse.content
-        } else {
+    func reverse() -> ReverseModifierComponent<Self> {
             return ReverseModifierComponent(content:self)
-        }
     }
 }
+
