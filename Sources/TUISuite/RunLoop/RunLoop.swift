@@ -89,14 +89,6 @@ public struct RunLoop {
             var frameEvent: InputEvent?
             if(input.waitForInput(timeout: targetFrameTime)) {
                 if let event = input.poll() {
-                    switch event {
-                    case .key(let key):
-                        if key.key == .char("c") && key.modifiers.contains(.ctrl) {
-                            isRunning = false
-                        }
-                    default:
-                        break
-                    }
                     frameEvent = event
                 }
             }

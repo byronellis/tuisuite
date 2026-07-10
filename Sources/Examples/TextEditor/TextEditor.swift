@@ -38,46 +38,51 @@ struct ConfigurationMenu : Component {
     }
 }
 
+struct AgentEntry : Identifiable {
+    enum EntryType {
+        case user, system, agent, tool
+    }
+    
+    let id : String
+    let type : EntryType
+    let text : String
+}
+
+public struct AgentInterface : Component {
+    @State var log : [AgentEntry] = [
+        AgentEntry(id: "1", type: .user, text: "Hello how are you?"),
+        AgentEntry(id: "2", type: .agent, text: "I'm fine, how can I help you today?")
+    ]
+    @State var listScroll = ListScrollState()
+    
+    public var body : some Component {
+        VStack {
+            List(log,scrollState: $listScroll,spacing: 1) { element in
+                VStack {
+                    Text("\(element.type)").foreground(.accent).modifier(.bold)
+                    Text(element.text)
+                }
+            }
+            Spacer()
+            HStack {
+                Text("Agent Text Input").foreground(.textSecondary)
+                Spacer().frame(height:.fixed(1))
+            }.border(color:.border)
+            HStack {
+                Text("Status Line")
+                Spacer()
+                Text("0 sessions")
+            }.frame(height:.fixed(1))
+        }
+    }
+}
 
 @main
 struct TextEditor {
 
     func run() {
         let app = Application {
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text("Configuration")
-                            Spacer()
-                        }
-                        .background()
-                        .frame(height:.fixed(1)).reverse()
-                        HStack {
-                            ConfigurationMenu()
-                            VStack {
-                                Text("Content")
-                                Spacer()
-                            }.border(color:.border)
-                        }
-
-                        HStack(spacing:1) {
-                            Text("First")
-                            Text("Second")
-                            Spacer()
-                            Text("Third")
-                        }
-                        .background()
-                        .frame(height:.fixed(1)).reverse()
-                    }
-                    .frame(width:.fixed(80),height:.fixed(24))
-                    Spacer()
-                }
-                Spacer()
-            }.foreground(.textPrimary).background(.background)
+            AgentInterface()
         }
         app.run()
     }

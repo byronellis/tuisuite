@@ -12,12 +12,24 @@ public final class Application<Content:Component> {
     public func run() {
         RunLoop.run { renderer,event in
             let fullScreenBounds = renderer.bounds
-            let rootComponent = rootBuilder()
+            let rootComponent = rootBuilder().attribute(fg:.textPrimary,bg:.background)
             let context = Context(event:event)
-
             
             _ = rootComponent.sizeThatFits(proposal: .init(width: fullScreenBounds.width, height:fullScreenBounds.height), context: context)            
-            rootComponent.render(renderer: renderer, bounds: renderer.bounds, context: .init(event:event))
+            rootComponent.render(renderer: renderer, bounds: renderer.bounds, context: context)
+            // If we arrive at the end of the event loop without consuming the input check for the default ctrl-c. This can be consumed upstream
+            // to disable ctrl-c shutdowns.
+            context.onEvent({event in
+                switch event {
+                case .key(let key):
+                    if key.key == .char("c") && key.modifiers.contains(.ctrl) {
+                        ApplicationContext.shared.signalShutdown()
+                    }
+                default:
+                    break
+                }
+                return true
+            })
         }
     }
 }
@@ -64,22 +76,47 @@ public struct Binding<Value> {
     }
 }
 
+extension Context {
+    public enum SharedActivePathTracker {
+        @TaskLocal public static var currentID:String = ""
+        
+        @inline(__always)
+        public static func withPath<R>(_ id:String,operation: () throws -> R) rethrows -> R {
+            return try $currentID.withValue(id, operation: operation)
+        }
+    }
+}
+
 @propertyWrapper
 public struct State<Value>  {
-    private let key: String
     private let defaultValue: Value
     
-    public init(wrappedValue: Value, id:String) {
-        self.key = id
+    public init(wrappedValue: Value) {
         self.defaultValue = wrappedValue
     }
-    
     public var wrappedValue : Value {
-        get { StateRegistry.shared.get(Value.self,id:key,defaultValue:defaultValue) }
-        set { StateRegistry.shared.set(id: key,value: newValue) }
+        get {
+            let currentPath = Context.SharedActivePathTracker.currentID
+            return StateRegistry.shared.get(Value.self,id:currentPath,defaultValue:defaultValue)
+        }
+        set {
+            let currentPath = Context.SharedActivePathTracker.currentID
+            StateRegistry.shared.set(id: currentPath, value: newValue)
+        }
+    }
+
+    public var projectedValue: Binding<Value> {
+        let fallback = self.defaultValue
+        return Binding(
+            get: {
+                let currentPath = Context.SharedActivePathTracker.currentID
+                return StateRegistry.shared.get(Value.self,id:currentPath,defaultValue:fallback)
+
+            }, set: { newValue in 
+                let currentPath = Context.SharedActivePathTracker.currentID
+                StateRegistry.shared.set(id: currentPath, value: newValue)
+            })
     }
     
-    public var projectedValue: Binding<Value> {
-        return Binding(get: { StateRegistry.shared.get(Value.self,id:key,defaultValue:defaultValue) },set: {newValue in StateRegistry.shared.set(id: key,value: newValue) })
-    }
+    
 }

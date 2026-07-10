@@ -2,7 +2,9 @@ public final class Context {
     public var fg: TerminalColor
     public var bg: TerminalColor
     public var modifier: Modifier
+
     public let event: InputEvent?
+    private var isConsumed : Bool = false
     
     private var ids: [String] = ["root"]
     private var id: String? = nil
@@ -34,6 +36,13 @@ public final class Context {
             return override
         }
         return ids.joined(separator: "/")
+    }
+    
+    public func onEvent(_ consumer: (InputEvent) -> Bool) {
+        guard !isConsumed && event != nil else { return }
+        if let e = event {
+            isConsumed = consumer(e)
+        }
     }
     
     public func override(fg:TerminalColor? = nil,bg:TerminalColor? = nil,modifier:Modifier? = nil) -> (TerminalColor,TerminalColor,Modifier) {
