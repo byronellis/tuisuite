@@ -54,10 +54,10 @@ public struct List<Data: RandomAccessCollection, Content: Component>: Component 
         var activeScroll = scrollState.wrappedValue
         context.onEvent { event in
             switch event {
-            case .mouse(let mouse):
-                let insideViewport = (mouse.x >= bounds.x && mouse.x <= bounds.x+bounds.width) && (mouse.y >= bounds.y && mouse.y <= bounds.y+bounds.height)
+            case .mouse(let button,_,let x,let y,_):
+                let insideViewport = (x >= bounds.x && x <= bounds.x+bounds.width) && (y >= bounds.y && y <= bounds.y+bounds.height)
                 if insideViewport {
-                    switch mouse.button {
+                    switch button {
                     case .scrollUp:
                         if activeScroll.topVisibleIndex > 0 {
                             activeScroll.topVisibleIndex -= 1

@@ -32,12 +32,4 @@ public extension Component {
         return .init(self, activeKey: activeKey, handler)
     }
     
-    func onKey(_ handler: @escaping (KeyEvent) -> (Bool)) -> InputModifierComponent<Self> {
-        return self.input {
-            if case .key(let key) = $0 {
-                return handler(key)
-            }
-            return false
-        }
-    }
 }

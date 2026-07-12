@@ -68,15 +68,6 @@ public struct KeyModifiers : OptionSet, CustomStringConvertible, Sendable {
 
 }
 
-public struct KeyEvent : CustomStringConvertible {
-    public let key: KeyInput
-    public let modifiers : KeyModifiers
-    
-    public var description: String {
-        return "Key: \(key) [Mods: \(modifiers)]"
-    }
-}
-
 public enum MouseButton {
     case left,middle,right,scrollUp,scrollDown,none
 }
@@ -85,27 +76,18 @@ public enum MouseAction {
     case press, release, drag, move
 }
 
-public struct MouseEvent : CustomStringConvertible {
-    public let button: MouseButton
-    public let action: MouseAction
-    public let x: Int
-    public let y: Int
-    public let modifiers: KeyModifiers
-    
-    public var description: String {
-        return "[Mouse \(action) \(button) at (\(x),\(y)) Modifiers \(modifiers)]"
-    }
-}
-
 public enum InputEvent : CustomStringConvertible  {
-    case key(KeyEvent)
-    case mouse(MouseEvent)
+    case key(KeyInput,KeyModifiers)
+    case mouse(MouseButton,MouseAction,Int,Int,KeyModifiers)
     case unknown([UInt8])
     
     public var description : String {
         switch self {
-        case .key(let e): return e.description
-        case .mouse(let e): return e.description
+        case .key(let key,let modifiers):
+            return "Key: \(key) [Mods: \(modifiers)]"
+
+        case .mouse(let button,let action,let x,let y,let modifiers):
+            return "[Mouse \(action) \(button) at (\(x),\(y)) Modifiers \(modifiers)]"
         case .unknown(let data): return "Unknown Bytes: \(data)"
         }
     }
@@ -165,7 +147,7 @@ public struct InputParser {
         case 65:button = .scrollDown;
         default: button = .none
         }
-        return .mouse(MouseEvent(button: button, action: action, x: x, y: y, modifiers: modifiers))
+        return .mouse(button,action,x,y,modifiers)
                 
     }
     
@@ -188,7 +170,7 @@ public struct InputParser {
         if (modCode & 4) != 0 { modifiers.insert(.ctrl) }
         if (modCode & 8) != 0 { modifiers.insert(.cmd) }
         
-        return .key(KeyEvent(key: .from(kittyCode:kittyCode), modifiers: modifiers))
+        return .key(.from(kittyCode:kittyCode),modifiers)
 
     }
     
@@ -253,7 +235,7 @@ public struct InputParser {
         default: key = nil
         }
         if let k = key {
-            return .key(KeyEvent(key: k, modifiers: modifiers))
+            return .key(k,modifiers)
         }
         return nil
     }
@@ -261,22 +243,22 @@ public struct InputParser {
     private static func parseFallbackAscii(_ buffer: [UInt8]) -> InputEvent? {
         guard !buffer.isEmpty else { return nil }
         switch buffer[0] {
-        case 3:return .key(KeyEvent(key: .char("c"), modifiers: [.ctrl]))
-        case 9:return .key(KeyEvent(key: .tab, modifiers: []))
-        case 10,13:return .key(KeyEvent(key: .enter, modifiers: []))
+        case 3:return .key(.char("C"),[.ctrl])
+        case 9:return .key(.tab,[])
+        case 10,13:return .key(.enter,[])
         case 27:
-            if buffer.count == 1 { return .key(KeyEvent(key: .escape, modifiers: [])) }
+            if buffer.count == 1 { return .key(.escape,[]) }
             let altMap = Character(UnicodeScalar(buffer[1]))
-            return .key(KeyEvent(key: .char(altMap), modifiers: [.alt]))
-        case 127: return .key(KeyEvent(key: .backspace, modifiers: []))
+            return .key(.char(altMap),[.alt])
+        case 127: return .key(.backspace,[])
         case 1...26:
             let char = Character(UnicodeScalar(buffer[0] + 64))
-            return  .key(KeyEvent(key: .char(char), modifiers: [.ctrl]))
+            return  .key(.char(char),[.ctrl])
         default:
             if let str = String(bytes:buffer,encoding: .utf8), let char = str.first {
                 var modifiers = KeyModifiers()
                 if char.isUppercase { modifiers.insert(.shift) }
-                return .key(KeyEvent(key: .char(char), modifiers: modifiers))
+                return .key(.char(char),modifiers)
             }
         }
         return .unknown(buffer)
