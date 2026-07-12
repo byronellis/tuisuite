@@ -46,8 +46,16 @@ public struct TabBar : Component {
                 } else if case let .key(key, modifiers) = event, key == .right && modifiers.isEmpty {
                     selectedTab.wrappedValue = min(tabs.count-1,selectedTab.wrappedValue + 1)
                     return true
-                } else if case let .key(key, modifiers) = event, key == .tab && modifiers.isEmpty {
-                    selectedTab.wrappedValue = (selectedTab.wrappedValue + 1) % tabs.count
+                } else if case let .key(key, modifiers) = event, key == .tab  {
+                    if modifiers.isEmpty {
+                        selectedTab.wrappedValue = (selectedTab.wrappedValue + 1) % tabs.count
+                    } else if modifiers.contains([.shift]) {
+                        if selectedTab.wrappedValue > 0 {
+                            selectedTab.wrappedValue = (selectedTab.wrappedValue - 1)
+                        } else {
+                            selectedTab.wrappedValue = tabs.count - 1 
+                        }
+                    }
                     return true
                 }
                 return false
