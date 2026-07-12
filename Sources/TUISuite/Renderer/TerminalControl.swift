@@ -1,5 +1,6 @@
 import Foundation
 
+
 enum TerminalControl {
     static func enter() {
         let setupSequence =

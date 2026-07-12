@@ -4,10 +4,9 @@ public final class Context {
     public var modifier: Modifier
 
     public let event: InputEvent?
-    private var isConsumed : Bool = false
+    public private(set) var isConsumed : Bool = false
     
     private var ids: [String] = ["root"]
-    private var id: String? = nil
     
     
     public init(fg: TerminalColor = .transparent, bg: TerminalColor = .transparent, modifier: Modifier = .none,event: InputEvent? = nil) {
@@ -26,15 +25,7 @@ public final class Context {
         }
     }
     
-    public func override(_ id:String) {
-        self.id = id
-    }
-    
     public var currentId: String {
-        if let override = self.id {
-            self.id = nil
-            return override
-        }
         return ids.joined(separator: "/")
     }
     
@@ -127,8 +118,10 @@ public struct ReverseModifierComponent<Content:Component> : Component {
 
     
     let content: Content
-    public init(content:Content) {
+    let apply: Bool
+    public init(content:Content,apply:Bool=true) {
         self.content = content
+        self.apply = apply
     }
 
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
@@ -136,16 +129,20 @@ public struct ReverseModifierComponent<Content:Component> : Component {
     }
     
     public func render(renderer: Renderer, bounds: Rect, context: Context) {
-        let original = context.override(fg:context.bg,bg:context.fg,modifier:context.modifier)
-        content.render(renderer: renderer,bounds:bounds,context:context)
-        context.restore(original)
+        if apply {
+            let original = context.override(fg:context.bg,bg:context.fg,modifier:context.modifier)
+            content.render(renderer: renderer,bounds:bounds,context:context)
+            context.restore(original)
+        } else {
+            content.render(renderer: renderer,bounds:bounds,context:context)
+        }
     }
 
 }
 
 public extension Component {
-    func reverse() -> ReverseModifierComponent<Self> {
-            return ReverseModifierComponent(content:self)
+    func reverse(apply:Bool = true) -> ReverseModifierComponent<Self> {
+        return ReverseModifierComponent(content:self,apply:apply)
     }
 }
 

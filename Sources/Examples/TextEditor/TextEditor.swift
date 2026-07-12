@@ -64,10 +64,12 @@ public struct AgentInterface : Component {
                 }
             }
             Spacer()
+            Divider()
             HStack {
                 Text("Agent Text Input").foreground(.textSecondary)
                 Spacer().frame(height:.fixed(1))
-            }.border(color:.border)
+            }
+            Divider()
             HStack {
                 Text("Status Line")
                 Spacer()

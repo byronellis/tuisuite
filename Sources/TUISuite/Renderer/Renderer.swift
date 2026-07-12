@@ -5,69 +5,11 @@ import Darwin
 import Glibc
 #endif
 
-private func appendString(_ stream: inout [UInt8],_ string: String) {
-    stream.append(contentsOf: string.utf8)
-}
-
-
 public struct Rect {
     public let x:Int
     public let y:Int
     public let width:Int
     public let height:Int
-}
-
-protocol ColorAppender {
-    func append(to stream: inout [UInt8],foreground:Bool)
-    func append(to stream: inout String,foreground:Bool)
-}
-
-public enum TerminalColor : ColorAppender,Equatable {
-    case ansi16(UInt8)
-    case xterm256(UInt8)
-    case truecolor(r:UInt8,g:UInt8,b:UInt8)
-    case transparent
-
-    func append(to stream: inout [UInt8],foreground:Bool = true) {
-        switch self {
-        case .ansi16(let code):
-            let colorIndex = Int(code & 15)
-            let ansiValue:Int
-            if foreground {
-                ansiValue = colorIndex < 8 ? (30 + colorIndex) : (90 + colorIndex - 8)
-            } else {
-                ansiValue = colorIndex < 8 ? (40 + colorIndex) : (100 + colorIndex - 8)
-            }
-            appendString(&stream,"\u{001B}[\(ansiValue)m")
-        case .xterm256(let code):
-            let type = foreground ? "38" : "48"
-            appendString(&stream,"\u{001B}[\(type);5;\(code)m")
-        case .truecolor(let r,let g,let b):
-            let type = foreground ? "38" : "48"
-            appendString(&stream,"\u{001B}[\(type);2;\(r);\(g);\(b)m")
-        case .transparent:
-            // Fall back to default terminal color masks
-            appendString(&stream,foreground ? "\u{001B}[39m" : "\u{001B}[49m")
-        }
-    }
-
-    func append(to stream: inout String,foreground:Bool = true) {
-        switch self {
-        case .ansi16(let code):
-            let base = foreground ? (code < 8 ? 30 : 82) : (code < 8 ? 40 : 92)
-            stream.append("\u{001B}[\(Int(base) + Int(code & 7))m")
-        case .xterm256(let code):
-            let type = foreground ? "38" : "48"
-            stream.append("\u{001B}[\(type);5;\(code)m")
-        case .truecolor(let r,let g,let b):
-            let type = foreground ? "38" : "48"
-            stream.append("\u{001B}[\(type);2;\(r);\(g);\(b)m")
-        case .transparent:
-            // Fall back to default terminal color masks
-            stream.append(foreground ? "\u{001B}[39m" : "\u{001B}[49m")
-        }
-    }
-
 }
 
 public enum SemanticColor {
@@ -86,7 +28,7 @@ public enum SemanticColor {
     }
 }
 
-public struct Color : ColorAppender {
+public struct Color  {
     private enum Storage {
         case concrete(TerminalColor)
         case semantic(SemanticColor)
@@ -108,24 +50,6 @@ public struct Color : ColorAppender {
         return Color(storage:.semantic(color))
     }
     
-
-    
-    func append(to stream: inout [UInt8],foreground:Bool = true) {
-        let color : TerminalColor = switch storage {
-        case .concrete(let color):color
-        case .semantic(let color):color.terminal
-        }
-        color.append(to: &stream,foreground:foreground)
-    }
-    
-    func append(to stream: inout String,foreground:Bool = true) {
-        let color : TerminalColor = switch storage {
-        case .concrete(let color):color
-        case .semantic(let color):color.terminal
-        }
-        color.append(to: &stream,foreground:foreground)
-    }
-    
 }
 
 public extension Color {
@@ -141,7 +65,7 @@ public extension Color {
     
 }
 
-public struct Modifier : OptionSet, Equatable, Sendable {
+public struct Modifier : OptionSet, Equatable, Sendable, Hashable {
     public let rawValue: UInt8
     public init(rawValue: UInt8) { self.rawValue = rawValue }
 
@@ -189,6 +113,76 @@ func getTerminalSize() -> TerminalSize {
     return TerminalSize(width: 80, height: 24)
 }
 
+struct ByteKeyCache : Hashable {
+    private let storage: UInt32
+    public init(color:TerminalColor,isForeground:Bool) {
+        let dir : UInt32 = isForeground ? (1 << 29) : 0
+        switch color {
+        case .ansi16(let val):
+            storage = (0 << 30) | dir | UInt32(val)
+        case .xterm256(let val):
+            storage = (1 << 30) | dir | UInt32(val)
+        case .truecolor(let r,let g,let b):
+            storage = (2 << 30) | dir | (UInt32(r) << 16) | (UInt32(g) << 8) | UInt32(b)
+        case .transparent:
+            storage = (3 << 30) | dir
+        }
+    }
+}
+
+final class ColorCache {
+    private let capability: TerminalCapability
+    private var byteSequenceCache: [ByteKeyCache:[UInt8]] = [:]
+    private var modifierCache: [Modifier:[UInt8]] = [:]
+    
+    public init(capability:TerminalCapability) {
+        self.capability = capability
+    }
+    
+    public func invalidate() {
+        byteSequenceCache.removeAll(keepingCapacity: true)
+        modifierCache.removeAll(keepingCapacity: true)
+    }
+    
+    
+    @inline(__always)
+    public func getBytes(for color:TerminalColor,isForeground:Bool) -> [UInt8] {
+        let key = ByteKeyCache(color: color, isForeground: isForeground)
+        if let result = byteSequenceCache[key] {
+            return result
+        }
+        let str = color.ansiSequence(isForeground: isForeground, capability: capability)
+        let result = Array(str.utf8)
+        byteSequenceCache[key] = result
+        return result
+    }
+    
+    public func getModifierBytes(for mods:Modifier) -> [UInt8] {
+        if let cachedBytes = modifierCache[mods] {
+            return cachedBytes
+        }
+        if mods.isEmpty {
+            modifierCache[mods] = []
+            return []
+        }
+        var codes = [String]()
+        if mods.contains(.bold)          { codes.append("1") }
+        if mods.contains(.dim)           { codes.append("2") }
+        if mods.contains(.italic)        { codes.append("3") }
+        if mods.contains(.underline)     { codes.append("4") }
+        if mods.contains(.blink)         { codes.append("5") }
+        if mods.contains(.reverse)       { codes.append("7") }
+        if mods.contains(.strikethrough) { codes.append("9") }
+ 
+        let str = "\u{001B}[\(codes.joined(separator: ";"))m"
+        let bytes = Array(str.utf8)
+        modifierCache[mods] = bytes
+        return bytes
+    }
+    
+    
+}
+
 
 public final class Renderer {
     private var width: Int
@@ -196,15 +190,29 @@ public final class Renderer {
     
     private var frontBuffer: [Cell] = []
     private var backBuffer: [Cell] = []
+    private var coordinates: [[[UInt8]]] = []
     
     
     private var resizeSource: DispatchSourceSignal?
     private let bufferLock = NSLock()
     
+    private let capability: TerminalCapability
+    private let colorCache: ColorCache
+    private let escResetBytes: [UInt8] = [0x1B, 0x5B, 0x30, 0x6D]
+
     private func setupBuffer() {
         let size = width*height
         frontBuffer = [Cell](repeating: Cell(char:0), count: size)
         backBuffer = [Cell](repeating: Cell(), count: size)
+        
+        coordinates = Array(repeating:Array(repeating:[],count:width),count:height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let seq = "\u{1B}[\(y+1);\(x+1)H"
+                self.coordinates[y][x] = Array(seq.utf8)
+
+            }
+        }
     }
     
     private func setupResizeHandler() {
@@ -237,6 +245,8 @@ public final class Renderer {
         let size = getTerminalSize()
         self.width = size.width
         self.height = size.height
+        self.capability = TerminalCapability.detect()
+        self.colorCache = ColorCache(capability: capability)
         setupBuffer()
         setupResizeHandler()
         TerminalControl.enter()
@@ -284,38 +294,31 @@ public final class Renderer {
                 }
                 
                 if x != lastX+1 || lastY != y {
-                    appendString(&output,"\u{1B}[\(y+1);\(x+1)H")
-                    
+                    output.append(contentsOf: coordinates[y][x])
                 }
                 
                 if cell.modifiers != activeMod {
-                    appendString(&output,"\u{001B}[0m");
+                    output.append(contentsOf: escResetBytes)
                     activeFg = nil
                     activeBg = nil
                     activeMod = cell.modifiers
-                    
-                    let mods = cell.modifiers
-                    if !mods.isEmpty {
-                        var codes = [String]()
-                        if mods.contains(.bold)          { codes.append("1")  }
-                        if mods.contains(.dim)           { codes.append("2") }
-                        if mods.contains(.italic)        { codes.append("3") }
-                        if mods.contains(.underline)     { codes.append("4") }
-                        if mods.contains(.blink)         { codes.append("5") }
-                        if mods.contains(.reverse)       { codes.append("7") }
-                        if mods.contains(.strikethrough) { codes.append("9") }
-                        appendString(&output,"\u{001B}[\(codes.joined(separator: ";"))m")
+                    let bytes = colorCache.getModifierBytes(for: cell.modifiers)
+                    if !bytes.isEmpty {
+                        output.append(contentsOf: bytes)
                     }
+                    
                     
                 }
                 
                 if activeFg != cell.fg {
-                    cell.fg.append(to: &output,foreground: true)
+                    let fgBytes = colorCache.getBytes(for: cell.fg, isForeground: true)
+                    output.append(contentsOf: fgBytes)
                     activeFg = cell.fg
 
                 }
                 if activeBg != cell.bg {
-                    cell.bg.append(to: &output,foreground: false)
+                    let bgBytes = colorCache.getBytes(for: cell.bg, isForeground: false)
+                    output.append(contentsOf: bgBytes)
                     activeBg = cell.bg
                 }
                 if let scalar = UnicodeScalar(cell.char) {

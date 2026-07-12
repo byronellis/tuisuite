@@ -39,7 +39,22 @@ public final class StateRegistry : @unchecked Sendable {
     private var storage:[String:Any] = [:]
     private var lock = os_unfair_lock()
     
-    private init() {}
+    public func log(_ message:String) {
+        guard let data = message.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: "./state.log")) {
+            do {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try handle.close()
+            } catch {
+            }
+        } else {
+            try? data.write(to: URL(fileURLWithPath: "./state.log"))
+        }
+    }
+
+    
+    private init() { }
     public func get<T>(_ type: T.Type, id:String,defaultValue:T) -> T  {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
@@ -78,11 +93,11 @@ public struct Binding<Value> {
 
 extension Context {
     public enum SharedActivePathTracker {
-        @TaskLocal public static var currentID:String = ""
+        @TaskLocal public static var currentPath: String = "root"
         
         @inline(__always)
-        public static func withPath<R>(_ id:String,operation: () throws -> R) rethrows -> R {
-            return try $currentID.withValue(id, operation: operation)
+        public static func withPath<R>(_ path:String,operation: () throws -> R) rethrows -> R {
+            return try $currentPath.withValue(path, operation: operation)
         }
     }
 }
@@ -90,31 +105,40 @@ extension Context {
 @propertyWrapper
 public struct State<Value>  {
     private let defaultValue: Value
+    private let line: Int
+    private let column: Int
+
     
-    public init(wrappedValue: Value) {
+    
+    public init(wrappedValue: Value,line:Int=#line,column:Int=#column) {
         self.defaultValue = wrappedValue
+        self.line = line
+        self.column = column
     }
+    
     public var wrappedValue : Value {
         get {
-            let currentPath = Context.SharedActivePathTracker.currentID
-            return StateRegistry.shared.get(Value.self,id:currentPath,defaultValue:defaultValue)
+            let activeKey = "\(Context.SharedActivePathTracker.currentPath)#L\(line)C\(column)"
+            return StateRegistry.shared.get(Value.self,id:activeKey,defaultValue:defaultValue)
         }
         set {
-            let currentPath = Context.SharedActivePathTracker.currentID
-            StateRegistry.shared.set(id: currentPath, value: newValue)
+            let activeKey = "\(Context.SharedActivePathTracker.currentPath)#L\(line)C\(column)"
+            StateRegistry.shared.set(id: activeKey, value: newValue)
         }
     }
 
     public var projectedValue: Binding<Value> {
         let fallback = self.defaultValue
+        
+        
         return Binding(
             get: {
-                let currentPath = Context.SharedActivePathTracker.currentID
-                return StateRegistry.shared.get(Value.self,id:currentPath,defaultValue:fallback)
+                let activeKey = "\(Context.SharedActivePathTracker.currentPath)#L\(line)C\(column)"
+                return StateRegistry.shared.get(Value.self,id:activeKey,defaultValue:fallback)
 
-            }, set: { newValue in 
-                let currentPath = Context.SharedActivePathTracker.currentID
-                StateRegistry.shared.set(id: currentPath, value: newValue)
+            }, set: { newValue in
+                let activeKey = "\(Context.SharedActivePathTracker.currentPath)#L\(line)C\(column)"
+                StateRegistry.shared.set(id: activeKey, value: newValue)
             })
     }
     

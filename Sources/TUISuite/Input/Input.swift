@@ -23,7 +23,26 @@ public enum KeyInput : Equatable, CustomStringConvertible {
             return "←"
         case .right:
             return "→"
-        default: return String(describing: self).capitalized
+        case .home:
+            return "Home"
+        case .end:
+            return "End"
+        case .pageUp:
+            return "Page Up"
+        case .pageDown:
+            return "Page Down"
+        case .insert:
+            return "Insert"
+        case .delete:
+            return "Delete"
+        case .escape:
+            return "Escape"
+        case .enter:
+            return "Enter"
+        case .backspace:
+            return "Backspace"
+        case .tab:
+            return "Tab"
         }
     }
     
@@ -99,17 +118,9 @@ extension KeyInput {
         case 27: return .escape
         case 9: return .tab
         case 127: return .backspace
-        case 57356: return .up
-        case 57357: return .down
-        case 57358: return .left
-        case 57359: return .right
-        case 57360: return .pageUp
-        case 57361: return .pageDown
-        case 57362: return .home
-        case 57363: return .end
-        case 57364: return .insert
-        case 57365: return .delete
-        case 57376...57387: return .fn(kittyCode - 57376 + 1)
+        // F1 through F12 use their legacy escape sequences. The private-use
+        // range starts at F13 in the kitty keyboard protocol.
+        case 57376...57387: return .fn(kittyCode - 57376 + 13)
         default:
             if let scalar = UnicodeScalar(kittyCode) {
                 return .char(Character(scalar))
@@ -158,14 +169,18 @@ public struct InputParser {
                 
     }
     
-    // Handle Kitty Keyboard (Ghostty etc) for better modifier support
+    // Handle kitty keyboard events (also used by Ghostty and cmux).
     private static func parseKittyKeyboardEvent(_ payload: [UInt8]) -> InputEvent? {
         guard let data = String(bytes:payload.dropLast(),encoding: .utf8) else { return nil }
-        let components = data.split(separator: ";").compactMap({ Int($0) })
-        guard !components.isEmpty else { return nil }
+        let fields = data.split(separator: ";", omittingEmptySubsequences: false)
+        guard let keyField = fields.first,
+              let kittyCode = Int(keyField.split(separator: ":", maxSplits: 1).first ?? "")
+        else { return nil }
         
-        let kittyCode = components[0]
-        let modCode = components.count > 1 ? components[1] - 1 : 0
+        // The modifier and event-type field can be written as `modifiers:type`.
+        let modCode = fields.count > 1
+            ? (Int(fields[1].split(separator: ":", maxSplits: 1).first ?? "") ?? 1) - 1
+            : 0
         
         var modifiers = KeyModifiers()
         if (modCode & 1) != 0 { modifiers.insert(.shift) }
@@ -178,7 +193,9 @@ public struct InputParser {
     }
     
     private static func parseLegacyAnsi(_ payload: [UInt8]) -> InputEvent? {
-        guard let data = String(bytes:payload.dropLast(),encoding:.utf8) else { return nil }
+        // Unlike kitty's CSI-u form, the final byte is part of the legacy
+        // sequence (for example `A`, `~`, or `P`) and must be retained.
+        guard let data = String(bytes: payload, encoding: .utf8) else { return nil }
         
         var  cleanString = data
         var modifiers = KeyModifiers()
@@ -204,13 +221,13 @@ public struct InputParser {
         
         let key:KeyInput?
         switch cleanString {
-        case "A": key = .up
-        case "B": key = .down
-        case "C": key = .right
-        case "D": key = .left
+        case "A", "1A": key = .up
+        case "B", "1B": key = .down
+        case "C", "1C": key = .right
+        case "D", "1D": key = .left
             
-        case "1~","H": key = .home
-        case "4~","F": key = .end
+        case "1~", "H", "1H", "7~": key = .home
+        case "4~", "F", "1F", "8~": key = .end
         case "5~": key = .pageUp
         case "6~": key = .pageDown
             
@@ -219,10 +236,10 @@ public struct InputParser {
             
         case "Z": key = .tab;modifiers.insert(.shift)
             
-        case "OP","11~": key = .fn(1)
-        case "OQ","12~": key = .fn(2)
-        case "OR","13~": key = .fn(3)
-        case "OS","14~": key = .fn(4)
+        case "OP", "P", "11~": key = .fn(1)
+        case "OQ", "Q", "12~": key = .fn(2)
+        case "OR", "R", "13~": key = .fn(3)
+        case "OS", "S", "14~": key = .fn(4)
         case "15~": key = .fn(5)
         case "17~": key = .fn(6)
         case "18~": key = .fn(7)
@@ -272,14 +289,23 @@ public struct InputParser {
             
             switch payload.first {
             case 60: return parseSGRMouse(payload)
-            case 117: return parseKittyKeyboardEvent(payload)
             default:
                 break
+            }
+            
+            // Kitty events are CSI <code>[;<modifiers>] u. The old check for
+            // a leading `u` was backwards, so every kitty event fell through
+            // and was interpreted as Alt+[.
+            if payload.last == 117, let kitty = parseKittyKeyboardEvent(payload) {
+                return kitty
             }
             
             if let legacy = parseLegacyAnsi(payload) {
                 return legacy
             }
+        }
+        if buffer.count >= 3 && buffer[0] == 27 && buffer[1] == 79 { // ESC O (SS3)
+            return parseLegacyAnsi(Array(buffer.dropFirst(2)))
         }
         return parseFallbackAscii(buffer)
     }
@@ -320,14 +346,15 @@ final class Input {
         flags |= O_NONBLOCK
         _ = fcntl(STDIN_FILENO, F_SETFL, flags)
         
-        // 6. Optional: Send ANSI codes to track mouse clicks and movement and also try to enable Kitty Keyboard Protocol and XTerm modifyOtherKeys
-        print("\u{001B}[?1000h\u{001B}[?1003h\u{001B}[?1002h\u{001B}[?1006h\u{001B}[>1u\u{001B}[>4;2m", terminator: "")
+        // Enable mouse reporting and ask kitty-protocol terminals to
+        // disambiguate Ctrl/Alt/Escape. Unsupported terminals ignore this.
+        print("\u{001B}[?1000h\u{001B}[?1003h\u{001B}[?1002h\u{001B}[?1006h\u{001B}[>1u", terminator: "")
         fflush(stdout)
     }
     
     func exitRawMode() {
-        // Turn off mouse tracking and key modifiers
-        print("\u{001B}[<4;2m\u{001B}[<1u\u{001B}[?1006l\u{001B}[?1002l\u{001B}[?1003l\u{001B}[?1000l", terminator: "")
+        // Restore the preceding kitty keyboard mode, then disable mouse tracking.
+        print("\u{001B}[<u\u{001B}[?1006l\u{001B}[?1002l\u{001B}[?1003l\u{001B}[?1000l", terminator: "")
         fflush(stdout)
         
         // Restore original cook configuration

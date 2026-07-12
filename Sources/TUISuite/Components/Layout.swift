@@ -59,7 +59,9 @@ public struct VStack<Content:Component> : Component {
          
         for (i, child) in children.enumerated() {
             context.push("v_\(i)")
-            let childProf = child.sizeThatFits(proposal: proposal, context: context)
+            let childProf = Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.sizeThatFits(proposal: proposal, context: context)
+            }
             context.pop()
             
             
@@ -90,8 +92,11 @@ public struct VStack<Content:Component> : Component {
 
         for (i, child) in children.enumerated() {
             context.push("v_\(i)")
-            let childProfile = child.sizeThatFits(proposal: .init(width: bounds.width, height: remainingHeight),context: context)
-            childProfiles[i] = childProfile
+            let childProfile = Context.SharedActivePathTracker.withPath(context.currentId) {
+                let size = child.sizeThatFits(proposal: .init(width: bounds.width, height: remainingHeight),context: context)
+                childProfiles[i] = size
+                return size
+            }
             context.pop()
             
             allocatedHeights[i] = childProfile.minHeight
@@ -154,8 +159,9 @@ public struct VStack<Content:Component> : Component {
             case .center: bounds.x + min(0,(bounds.width - finalWidth) / 2)
             case .trailing: bounds.x + min(0,(bounds.width - finalWidth))
             }
-            
-            child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:finalWidth,height:height),context:context)
+            Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:finalWidth,height:height),context:context)
+            }
             yOffset += height + spacing
             context.pop()
         }
@@ -188,7 +194,10 @@ public struct HStack<Content:Component> : Component {
         
         for (i, child) in children.enumerated() {
             context.push("h_\(i)")
-            let childProf = child.sizeThatFits(proposal: proposal, context: context)
+            
+            let childProf = Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.sizeThatFits(proposal: proposal, context: context)
+            }
             context.pop()
             
             minW += childProf.minWidth
@@ -218,7 +227,9 @@ public struct HStack<Content:Component> : Component {
         
         for (i, child) in children.enumerated() {
             context.push("h_\(i)")
-            let childProfile = child.sizeThatFits(proposal: .init(width:remainingWidth,height:bounds.height), context: context)
+            let childProfile = Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.sizeThatFits(proposal: .init(width:remainingWidth,height:bounds.height), context: context)
+            }
             childProfiles[i] = childProfile
             context.pop()
             
@@ -288,8 +299,9 @@ public struct HStack<Content:Component> : Component {
             case .middle: bounds.y + min(0,(bounds.height - finalHeight) / 2)
             case .bottom: bounds.y + min(0,(bounds.height - finalHeight))
             }
-            
-            child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:width,height:finalHeight),context:context)
+            Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.render(renderer:renderer,bounds:Rect(x:xOffset,y:yOffset,width:width,height:finalHeight),context:context)
+            }
             xOffset += width + spacing
             
             context.pop()

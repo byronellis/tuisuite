@@ -18,6 +18,11 @@ let package = Package(
             dependencies: ["TUISuite"],
             path: "Sources/Examples/TextEditor"
         ),
+        .executableTarget(
+            name: "Gallery",
+            dependencies: ["TUISuite"],
+            path: "Sources/Examples/Gallery"
+        ),
         .target(
             name: "TUISuite"
         ),
