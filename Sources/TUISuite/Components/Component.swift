@@ -74,14 +74,35 @@ public struct Empty : Component {
 
 @resultBuilder
 public struct ComponentBuilder {
+    public static func buildBlock() -> Empty {
+        Empty()
+    }
     public static func buildBlock<C:Component>(_ component: C) -> C {
         return component
+    }
+    
+    public static func buildExpression(_ component :()) -> Empty {
+        Empty()
     }
     public static func buildExpression<C:Component>(_ component: C) -> C {
         return component
     }
+    
     public static func buildBlock<each C:Component>(_ components: repeat each C) -> TupleComponent<repeat each C> {
         return TupleComponent((repeat each components))
+    }
+    
+    public static func buildOptional<C:Component>(_ component: C?) -> ConditionalComponent<C,Empty> {
+        if let c = component {
+            return ConditionalComponent(.trueComponent(c))
+        }
+        return ConditionalComponent(.falseComponent(Empty()))
+    }
+    public static func buildEither<C1:Component,C2:Component>(first component: C1) -> ConditionalComponent<C1,C2> {
+        return ConditionalComponent(.trueComponent(component))
+    }
+    public static func buildEither<C1:Component,C2:Component>(second component: C2) -> ConditionalComponent<C1,C2> {
+        return ConditionalComponent(.falseComponent(component))
     }
 
 }

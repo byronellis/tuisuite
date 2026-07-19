@@ -20,7 +20,7 @@ public final class Application<Content:Component> {
             // If we arrive at the end of the event loop without consuming the input check for the default ctrl-c. This can be consumed upstream
             // to disable ctrl-c shutdowns.
             context.onEvent({event in
-                if case .key(let key,let modifiers) = event, key == .char("C"), modifiers.contains(.ctrl) {
+                if case .key(let key,let modifiers) = event, key == .char("C") || key == .char("c"), modifiers.contains(.ctrl) {
                     ApplicationContext.shared.signalShutdown()
                 }
                 return true

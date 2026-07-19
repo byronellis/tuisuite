@@ -62,6 +62,7 @@ public struct VStack<Content:Component> : Component {
             let childProf = Context.SharedActivePathTracker.withPath(context.currentId) {
                 child.sizeThatFits(proposal: proposal, context: context)
             }
+//            StateRegistry.shared.log("VStack \(context.currentId) \(proposal) \(childProf) \(child)\n")
             context.pop()
             
             
@@ -198,6 +199,7 @@ public struct HStack<Content:Component> : Component {
             let childProf = Context.SharedActivePathTracker.withPath(context.currentId) {
                 child.sizeThatFits(proposal: proposal, context: context)
             }
+//            StateRegistry.shared.log("HStack \(context.currentId) \(proposal) \(childProf) \(child)\n")
             context.pop()
             
             minW += childProf.minWidth

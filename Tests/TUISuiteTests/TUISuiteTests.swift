@@ -37,12 +37,12 @@ import Testing
     ]
 
     for (bytes, expectedKey, expectedModifiers) in cases {
-        guard case let .key(event)? = InputParser.parseEvent(from: bytes) else {
+        guard case let .key(key, modifiers)? = InputParser.parseEvent(from: bytes) else {
             Issue.record("Expected a key event for \(bytes)")
             continue
         }
-        #expect(event.key == expectedKey)
-        #expect(event.modifiers == expectedModifiers)
+        #expect(key == expectedKey)
+        #expect(modifiers == expectedModifiers)
     }
 }
 
@@ -55,11 +55,27 @@ import Testing
     ]
 
     for (bytes, expectedKey, expectedModifiers) in cases {
-        guard case let .key(event)? = InputParser.parseEvent(from: bytes) else {
+        guard case let .key(key, modifiers)? = InputParser.parseEvent(from: bytes) else {
             Issue.record("Expected a key event for \(bytes)")
             continue
         }
-        #expect(event.key == expectedKey)
-        #expect(event.modifiers == expectedModifiers)
+        #expect(key == expectedKey)
+        #expect(modifiers == expectedModifiers)
     }
+}
+
+@Test func tabBarPropagatesFlexibleContentSizing() {
+    let tabBar = TabBar(["First"], selected: .constant(value: 0)) { _ in
+        VStack {
+            Spacer()
+        }
+    }
+
+    let size = tabBar.sizeThatFits(
+        proposal: ProposedSize(width: 80, height: 24),
+        context: Context()
+    )
+
+    #expect(size.maxWidth == nil)
+    #expect(size.maxHeight == nil)
 }
