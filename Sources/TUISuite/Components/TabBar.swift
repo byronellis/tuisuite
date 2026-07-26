@@ -13,21 +13,38 @@ public struct TabBar<Content:Component> : Component {
     
     public var selectedTab:Binding<Int>
     private let activeKey: String
-    
-    let tabs: [(String,Int,Int)]
+
+    let tabs: [Text]
+    let layout: HStackLayout<Text>
     let style: BorderStyle
 
 
     let content: (Int) -> Content
     
     public init(_ tabs: [String], selected selectedTab: Binding<Int>, style: BorderStyle = .single, @ComponentBuilder content: @escaping (Int) -> Content = { _ in DummyTabContent() }) {
-        var t:[(String,Int,Int)] = []
+
+        var text: [Text] = []
+        var hotkeys: [String?] = []
+        var tabWidths: [(width:Int,offset:Int)] = []
+        
         var offset = 1
         for tab in tabs {
-            t.append((tab,tab.count+2,offset))
-            offset += tab.count+2
+            let hotkey:String?
+            let title:TextStorage
+            if let match = tab.wholeMatch(of: /([^~]*)~([^~])~(.*)/) {
+                hotkey = String(match.2)
+                title = String(match.1).plain + String(match.2).styled(.init(foreground: .textSecondary, background: .transparent, modifier: [])) + String(match.3).plain
+            } else {
+                hotkey = nil
+                title = tab.plain
+            }
+            text.append(Text(title,lineLimit:1))
+            hotkeys.append(hotkey)
+            tabWidths.append((0,0))
         }
-        self.tabs = t
+        self.tabs = text
+        self.layout = .init(spacing: 1, leading: 1,trailing: 1,children: self.tabs)
+        
         self.selectedTab = selectedTab
         self.style = style
         self.activeKey = Context.SharedActivePathTracker.currentPath
@@ -36,16 +53,19 @@ public struct TabBar<Content:Component> : Component {
     }
     
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
-        let tabWidth  = tabs.map(\.1).reduce(0, +)+2
-        let tabHeight = 3
+        let tabSize = layout.sizeThatFits(proposal: proposal, context: context)
+        
         
         let child:(Int,Content) = Context.SharedActivePathTracker.withPath(activeKey) { (selectedTab.wrappedValue,content(selectedTab.wrappedValue)) }
 
         
-        if let dummy = child.1 as? DummyTabContent {
-            return Size(minWidth: tabWidth, idealWidth: tabWidth, maxWidth: proposal.width, minHeight: tabHeight, idealHeight: tabHeight, maxHeight: 3)
+        if child.1 is DummyTabContent {
+            //If there's no tab context we'll render ourselves as just the tab. Not that the tab size rendering is horizontal so only
+            //considers the horizontal space not the vertical space required for the top and bottom of the tab bar.
+            return Size(minWidth: tabSize.minWidth, idealWidth: tabSize.idealWidth, maxWidth: tabSize.maxWidth,
+                        minHeight: tabSize.minHeight+2, idealHeight: tabSize.idealHeight+2, maxHeight: tabSize.maxHeight.map({ $0+2 }))
         }
-        if let tuple = child.1 as? ComponentContainer {
+        if child.1 is ComponentContainer {
             fatalError("Selected tab content must contain a single element")
         }
         
@@ -55,22 +75,22 @@ public struct TabBar<Content:Component> : Component {
         let childProposal = ProposedSize(width: proposedChildWidth, height: proposedChildHeight)
 
         context.push("t_\(child.0)")
-        let childProfile = Context.SharedActivePathTracker.withPath(context.currentId) {
+        let childSize = Context.SharedActivePathTracker.withPath(context.currentId) {
             child.1.sizeThatFits(proposal: childProposal, context: context)
         }
 //            StateRegistry.shared.log("\(child) \(proposal) \(childProfile)\n")
         
         context.pop()
         return Size(
-            minWidth: max(childProfile.minWidth + 2,tabWidth),
-            idealWidth: max(childProfile.idealWidth + 2,tabWidth),
+            minWidth: max(childSize.minWidth + 2,tabSize.minWidth),
+            idealWidth: max(childSize.idealWidth + 2,tabSize.idealWidth),
             // Preserve the content's flexibility. Converting an unbounded
             // child maximum into the finite proposal makes parent stacks
             // treat the tab bar as fixed at its ideal size.
-            maxWidth: childProfile.maxWidth.map { max($0 + 2, tabWidth) },
-            minHeight: childProfile.minHeight + 4,
-            idealHeight: childProfile.idealHeight + 4,
-            maxHeight: childProfile.maxHeight.map { $0 + 4 }
+            maxWidth: childSize.maxWidth.map { max($0 + 2, tabSize.idealWidth) },
+            minHeight: childSize.minHeight + 4,
+            idealHeight: childSize.idealHeight + 4,
+            maxHeight: childSize.maxHeight.map { $0 + 4 }
         )
 
     }
@@ -79,75 +99,55 @@ public struct TabBar<Content:Component> : Component {
         let maxX = bounds.x + bounds.width - 1
         let maxY = bounds.y + 2
 
-
-        
-        context.onEvent { event in
-            return Context.SharedActivePathTracker.withPath(activeKey) {
-                if case let .mouse(button, action, x, y, _) = event, button == .left,action == .press, x >= bounds.x, x < bounds.x + bounds.width, y >= bounds.y, y < bounds.y + bounds.height {
-
-                    for (i,tab) in tabs.enumerated() {
-                        if tab.2 <= x && tab.2+tab.1 > x {
-                            selectedTab.wrappedValue = i
-                        }
-                    }
-                    return true
-                } else if case let .key(key, modifiers) = event, key == .left && modifiers.isEmpty {
-                    selectedTab.wrappedValue = max(0,selectedTab.wrappedValue - 1)
-                    return true
-                } else if case let .key(key, modifiers) = event, key == .right && modifiers.isEmpty {
-                    selectedTab.wrappedValue = min(tabs.count-1,selectedTab.wrappedValue + 1)
-                    return true
-                } /*else if case let .key(key, modifiers) = event, key == .tab  {
-                    if modifiers.isEmpty {
-                        selectedTab.wrappedValue = (selectedTab.wrappedValue + 1) % tabs.count
-                    } else if modifiers.contains([.shift]) {
-                        if selectedTab.wrappedValue > 0 {
-                            selectedTab.wrappedValue = (selectedTab.wrappedValue - 1)
-                        } else {
-                            selectedTab.wrappedValue = tabs.count - 1
-                        }
-                    }
-                    return true*
-                }*/
-                return false
-            }
-        }
-        
-
         for x in bounds.x...maxX {
             renderer.drawString(style.horizontal, x:x,y:maxY, fg: context.fg, bg: context.bg,modifiers:context.modifier)
         }
+
+        var tabBounds: [Rect] = Array(repeating: .zero, count: tabs.count)
+        layout.render(renderer: renderer, bounds: Rect(x: bounds.x,y:bounds.y+1,width:bounds.width,height:1), context: context) { i,tab,bounds,context in
+            //Draw the tab
+            tab.render(renderer: renderer, bounds: bounds, context: context)
+            tabBounds[i] = bounds
+        }
         
+        
+        /*
         var offsetX = bounds.x+1
         for (i,tab) in tabs.enumerated() {
-            let tabWidth = tab.1
+            let tabWidth = cache.value[i]
             renderer.drawString(i == 0 ? style.topLeft : (i < tabs.count) ? style.topMiddle : style.topRight, x: offsetX, y: bounds.y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
             renderer.drawString(style.vertical,x:offsetX,y:bounds.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
             renderer.drawString(style.bottomMiddle,x:offsetX,y:maxY,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-            renderer.drawString(tab.0,x:offsetX+1,y:bounds.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-            for x in 0..<(tabWidth-1) {
+            let tabBounds = Rect(x: offsetX+1, y: bounds.y+1, width: bounds.width-(offsetX+1), height: bounds.height)
+            context.push("tab_\(i)")
+            Context.SharedActivePathTracker.withPath(context.currentId) {
+                tab.render(renderer: renderer, bounds: tabBounds, context: context)
+            }
+            context.pop()
+            for x in 0..<(tabWidth.1-1) {
                 renderer.drawString(style.horizontal,x:offsetX+x+1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers: context.modifier)
             }
-            offsetX += tabWidth
+            offsetX += tabWidth.0+1
             // TODO: Compute appropriate truncations if text elements are too large
         }
         renderer.drawString(style.topRight, x: offsetX, y: bounds.y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
         renderer.drawString(style.vertical, x: offsetX, y: bounds.y+1, fg: context.fg, bg: context.bg, modifiers: context.modifier)
         renderer.drawString(style.bottomMiddle, x: offsetX, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-
+        */
+        
         let child: (Int,Content) =
         Context.SharedActivePathTracker.withPath(activeKey) {
             let selected = selectedTab.wrappedValue
-            offsetX = tabs[selected].2
-            for x in 0..<tabs[selected].1 {
+/*            offsetX = cache.value[selected].1
+            for x in 0..<cache.value[selected].0 {
                 renderer.drawString(" ", x: offsetX+x, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
             }
             renderer.drawString(style.bottomRight, x: offsetX, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-            renderer.drawString(style.bottomLeft, x: offsetX+tabs[selected].1, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+            renderer.drawString(style.bottomLeft, x: offsetX+cache.value[selected].0, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)  */
             return (selected,self.content(selected))
         }
         
-        if let dummy = child.1 as? DummyTabContent {
+        if child.1 is DummyTabContent {
             return
         }
         // The tab header consumes three rows and the outer border consumes one
@@ -175,6 +175,74 @@ public struct TabBar<Content:Component> : Component {
             child.1.render(renderer: renderer, bounds: childBounds, context: context)
         }
         context.pop()
+        
+        // Draw the tab borders now that the child borders have all been drawn. Run this in selected tab context
+        // so we can alter the drawing to account for the tab
+        Context.SharedActivePathTracker.withPath(activeKey) {
+            let selected = selectedTab.wrappedValue
+
+            if let end = tabBounds.last {
+                renderer.drawString(style.topRight,x:end.x+end.width,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.vertical,x:end.x+end.width,y:end.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.bottomMiddle,x:end.x+end.width,y:end.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            }
+
+            for (i,b) in tabBounds.enumerated() {
+                renderer.drawString(i == 0 ? style.topLeft : style.topMiddle,x:b.x-1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.vertical, x:b.x-1,y:b.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                if(i == 0) {
+                    renderer.drawString(bounds.height > 3 ? style.leftT : style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                } else {
+                    renderer.drawString(style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                }
+                for x in 0..<b.width {
+                    renderer.drawString(style.horizontal,x:b.x+x,y:b.y-1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                }
+            }
+
+            // Update the rendering for the selected tab
+            let b = tabBounds[selected]
+            //Left Side
+            if(selected == 0) {
+                renderer.drawString(bounds.height > 3 ? style.vertical : style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            } else {
+                renderer.drawString(style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            }
+            //Right Side
+            renderer.drawString(style.bottomLeft,x:b.x+b.width,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            for x in 0..<b.width {
+                renderer.drawString(" ",x:b.x+x,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            }
+        }
+
+        
+        context.onEvent { event in
+            return Context.SharedActivePathTracker.withPath(activeKey) {
+                if case let .mouse(button, action, x, y, _) = event, button == .left,action == .press, x >= bounds.x, x < bounds.x + bounds.width, y >= bounds.y, y < bounds.y + bounds.height {
+                    //TODO: Check the real tab rects
+                    return false
+                } else if case let .key(key, modifiers) = event, key == .left && modifiers.isEmpty {
+                    selectedTab.wrappedValue = max(0,selectedTab.wrappedValue - 1)
+                    return true
+                } else if case let .key(key, modifiers) = event, key == .right && modifiers.isEmpty {
+                    selectedTab.wrappedValue = min(tabs.count-1,selectedTab.wrappedValue + 1)
+                    return true
+                } /*else if case let .key(key, modifiers) = event, key == .tab  {
+                    if modifiers.isEmpty {
+                        selectedTab.wrappedValue = (selectedTab.wrappedValue + 1) % tabs.count
+                    } else if modifiers.contains([.shift]) {
+                        if selectedTab.wrappedValue > 0 {
+                            selectedTab.wrappedValue = (selectedTab.wrappedValue - 1)
+                        } else {
+                            selectedTab.wrappedValue = tabs.count - 1
+                        }
+                    }
+                    return true*
+                }*/
+                return false
+            }
+        }
+
 
     }
     

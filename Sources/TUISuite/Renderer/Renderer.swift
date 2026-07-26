@@ -5,14 +5,18 @@ import Darwin
 import Glibc
 #endif
 
-public struct Rect {
+public struct Rect : Sendable {
     public let x:Int
     public let y:Int
     public let width:Int
     public let height:Int
 }
 
-public enum SemanticColor {
+public extension Rect {
+    static let zero:Rect = .init(x: 0, y: 0, width: 0, height: 0)
+}
+
+public enum SemanticColor : Sendable {
     case background, textPrimary, textSecondary, accent, error, border
     
     public var terminal: TerminalColor {
@@ -28,8 +32,8 @@ public enum SemanticColor {
     }
 }
 
-public struct Color  {
-    private enum Storage {
+public struct Color : Sendable {
+    private enum Storage : Sendable {
         case concrete(TerminalColor)
         case semantic(SemanticColor)
     }

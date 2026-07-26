@@ -39,7 +39,7 @@ public enum TerminalCapability {
     }
 }
 
-public enum TerminalColor : Equatable {
+public enum TerminalColor : Sendable,Equatable {
     case ansi16(UInt8)
     case xterm256(UInt8)
     case truecolor(r:UInt8,g:UInt8,b:UInt8)

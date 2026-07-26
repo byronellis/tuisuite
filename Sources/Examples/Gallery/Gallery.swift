@@ -27,9 +27,13 @@ public struct KeyboardEntry : Component {
                 case 1:
                     VStack {
                         Spacer()
+                        Text("Second Tab")
+                        Spacer()
                     }
                 case 2:
                     HStack {
+                        Spacer()
+                        Text("Third Tab")
                         Spacer()
                     }
                 default:

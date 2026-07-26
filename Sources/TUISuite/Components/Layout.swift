@@ -169,6 +169,141 @@ public struct VStack<Content:Component> : Component {
     }
 }
 
+public struct HStackLayout<Content:Component> {
+    private let alignment: VerticalAlignment
+    private let spacing: Int
+    private let leading: Int
+    private let trailing: Int
+    private let children: [Content]
+    
+    public init(alignment: VerticalAlignment = .middle, spacing: Int = 0,leading: Int = 0,trailing: Int = 0,children: [Content]) {
+        self.alignment = alignment
+        self.spacing = spacing
+        self.leading = leading
+        self.trailing = trailing
+        self.children = children
+    }
+    
+    public func sizeThatFits(proposal:ProposedSize, context: Context) -> Size {
+        var minW = 0; var idealW = 0; var maxW: Int? = 0
+        var minH = 0; var idealH = 0; var maxH: Int? = 0
+        
+        let totalSpacing = leading + trailing + max(0,children.count - 1)*spacing
+        for (i, child) in children.enumerated() {
+            context.push("h_\(i)")
+            let childSize = Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.sizeThatFits(proposal: proposal, context: context)
+            }
+            context.pop()
+            minW += childSize.minWidth
+            idealW += childSize.idealWidth
+            if maxW != nil, let cmw = childSize.maxWidth { maxW! += cmw } else { maxW = nil }
+            
+            minH = max(minH, childSize.minHeight)
+            idealH = max(idealH, childSize.idealHeight)
+            if maxH != nil, let cmh = childSize.maxHeight { maxH = max(maxH!, cmh) } else { maxH = nil }
+        }
+        return Size(
+            minWidth: minW + totalSpacing, idealWidth: idealW + totalSpacing, maxWidth: maxW.map { $0 + totalSpacing },
+            minHeight: minH, idealHeight: idealH, maxHeight: maxH
+        )
+
+    }
+    
+    public func render(renderer: Renderer, bounds:Rect, context: Context, _ child: (Int,Content,Rect,Context) -> Void) {
+        let totalSpacing = max(0, children.count - 1) * spacing
+        var remainingWidth = bounds.width - totalSpacing - leading - trailing
+        
+        var childSizes = [Size](repeating: .fixed(width: 0, height: 0), count: children.count)
+        var allocatedWidths = [Int](repeating: 0, count: children.count)
+        
+        var unallocatedIndices = [Int]()
+        var expandingIndices = [Int]()
+        
+        for (i, child) in children.enumerated() {
+            context.push("h_\(i)")
+            let childSize = Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.sizeThatFits(proposal: .init(width:remainingWidth,height:bounds.height), context: context)
+            }
+            childSizes[i] = childSize
+            context.pop()
+            
+            allocatedWidths[i] = childSize.minWidth
+            remainingWidth -= childSize.minWidth
+            
+            if childSize.maxWidth == nil {
+                expandingIndices.append(i)
+            } else if childSize.idealWidth > childSize.minWidth {
+                unallocatedIndices.append(i)
+            }
+        }
+        
+        //Try to allocate remaining space to items that have an ideal width larger than
+        //than their minimum width
+        if remainingWidth > 0 && !unallocatedIndices.isEmpty {
+            let sorted = unallocatedIndices.sorted {
+                (childSizes[$0].idealWidth - childSizes[$0].minWidth) < (childSizes[$1].idealWidth - childSizes[$1].minWidth)
+            }
+            var remaining = sorted.count
+            for i in sorted {
+                let childSize = childSizes[i]
+                let needed = childSize.idealWidth - childSize.minWidth
+                let available = remainingWidth / remaining
+                let allocation = min(needed,available)
+                allocatedWidths[i] += allocation
+                remainingWidth -= allocation
+                remaining -= 1
+                if remainingWidth <= 0 {
+                    break
+                }
+            }
+        }
+        
+        //Any remaining width can go to flex elements like spacers
+        if remainingWidth > 0 && !expandingIndices.isEmpty {
+            let amount = remainingWidth / expandingIndices.count
+            var remainder = remainingWidth % expandingIndices.count
+            for i in expandingIndices {
+                let extra = remainder > 0 ? 1 : 0
+                remainder -= extra
+                allocatedWidths[i] += amount + extra
+            }
+        }
+        
+        var xOffset = bounds.x + leading
+        for (i,c) in children.enumerated() {
+            context.push("h_\(i)")
+            let width = allocatedWidths[i]
+            let childSize = childSizes[i]
+            
+            guard xOffset < bounds.x + bounds.width - trailing else {
+                context.pop()
+                break
+            }
+            
+            let finalHeight = if childSize.maxHeight == nil {
+                bounds.height
+            } else {
+                min(childSize.idealHeight,bounds.height)
+            }
+            let yOffset = switch alignment {
+            case .top: bounds.y
+            case .middle: bounds.y + min(0,(bounds.height - finalHeight) / 2)
+            case .bottom: bounds.y + min(0,(bounds.height - finalHeight))
+            }
+            Context.SharedActivePathTracker.withPath(context.currentId) {
+                child(i,c,Rect(x:xOffset,y:yOffset,width:width,height:finalHeight),context)
+            }
+            xOffset += width + spacing
+            
+            context.pop()
+        }
+
+        
+    }
+    
+}
+
 public struct HStack<Content:Component> : Component {
     public typealias Body = Never
     

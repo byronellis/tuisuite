@@ -5,24 +5,32 @@ private class Cache<T>  {
 public struct Text : Component {
     public typealias Body = Never
     
-    public var text: String
+    public var text: TextStorage
     public var lineLimit: Int?
     public var truncationMode: TruncationMode
     public var lineBreakMode: LineBreakMode
     
     private var cache: Cache<(lines:[String],lastText: String, lastProposal:ProposedSize?)>
     
-    public init(_ text: String,lineLimit:Int? = nil,truncate: TruncationMode = .tail,wrap: LineBreakMode = .wordWrap) {
+    public init(_ text: TextStorage,lineLimit:Int? = nil,truncate: TruncationMode = .tail,wrap: LineBreakMode = .wordWrap) {
         self.text = text
         self.lineLimit = lineLimit
         self.truncationMode = truncate
         self.lineBreakMode = wrap
-        self.cache = Cache((lines: [], lastText: text, lastProposal: nil))
+        self.cache = Cache((lines: [], lastText: text.string, lastProposal: nil))
     }
     
+    public init(_ text: String,lineLimit:Int? = nil,truncate: TruncationMode = .tail,wrap: LineBreakMode = .wordWrap) {
+        self.init(.plain(text),lineLimit: lineLimit,truncate: truncate,wrap: wrap)
+    }
+    
+    public init(_ text: [TextSegment],lineLimit:Int? = nil,truncate: TruncationMode = .tail,wrap: LineBreakMode = .wordWrap) {
+        self.init(.rich(text),lineLimit: lineLimit,truncate: truncate,wrap: wrap)
+    }
+
     public func sizeThatFits(proposal: ProposedSize, context: Context) -> Size {
         // 1. FAST PATH Bypasses calculations if text, widths, AND height constraints match
-        if cache.value.lastText == text,
+        if cache.value.lastText == text.string,
            let lastProposal = cache.value.lastProposal,
            lastProposal.width == proposal.width,
            lastProposal.height == proposal.height {
@@ -41,6 +49,7 @@ public struct Text : Component {
         let targetWidth = proposal.width ?? Int.max
         let maxLinesAllowed = min(lineLimit ?? Int.max, proposal.height ?? Int.max)
         
+        let text = self.text.string
         var calculatedLines = [String]()
         
         // 3. Handle Single-Line Truncation Modes
@@ -95,12 +104,45 @@ public struct Text : Component {
         )    }
     
     public func render(renderer: Renderer, bounds: Rect, context: Context) {
+        
+        var segments = text.segments
+        
         // Render out the exact lines populated by the measurement pass
         for (i, line) in cache.value.lines.enumerated() {
             guard i < bounds.height else { break }
             
             // Clip line length to ensure it fits the final bounding box layout allocation
             let clippedLine = line.count > bounds.width ? String(line.prefix(bounds.width)) : line
+            
+            var remaining = clippedLine.count
+            var offset = 0
+            while remaining > 0 {
+                let current = segments.removeFirst()
+                if current.text.count > remaining {
+                    renderer.drawString(
+                        String(current.text.prefix(remaining)),
+                        x: bounds.x + offset,
+                        y: bounds.y + i,
+                        fg: context.fg,
+                        bg: context.bg,
+                        modifiers: context.modifier
+                    )
+                    offset += remaining
+                    segments.insert(TextSegment(text:String(current.text.dropFirst(remaining)),style:current.style), at: 0 )
+                    remaining = 0
+                } else {
+                    renderer.drawString(
+                        current.text,
+                        x: bounds.x + offset,
+                        y: bounds.y + i,
+                        fg: context.fg,
+                        bg: context.bg,
+                        modifiers: context.modifier
+                    )
+                    remaining -= current.text.count
+                    offset += current.text.count
+                }
+            }
             
             renderer.drawString(
                 clippedLine,
