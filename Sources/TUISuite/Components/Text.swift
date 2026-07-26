@@ -118,14 +118,20 @@ public struct Text : Component {
             var offset = 0
             while remaining > 0 {
                 let current = segments.removeFirst()
+                let style = current.style
+                
+                let fg = style.foreground.terminal(context.fg)
+                let bg = style.background.terminal(context.bg)
+                let m  = style.modifier ?? context.modifier
+                
                 if current.text.count > remaining {
                     renderer.drawString(
                         String(current.text.prefix(remaining)),
                         x: bounds.x + offset,
                         y: bounds.y + i,
-                        fg: context.fg,
-                        bg: context.bg,
-                        modifiers: context.modifier
+                        fg: fg,
+                        bg: bg,
+                        modifiers: m
                     )
                     offset += remaining
                     segments.insert(TextSegment(text:String(current.text.dropFirst(remaining)),style:current.style), at: 0 )
@@ -135,23 +141,14 @@ public struct Text : Component {
                         current.text,
                         x: bounds.x + offset,
                         y: bounds.y + i,
-                        fg: context.fg,
-                        bg: context.bg,
-                        modifiers: context.modifier
+                        fg: fg,
+                        bg: bg,
+                        modifiers: m
                     )
                     remaining -= current.text.count
                     offset += current.text.count
                 }
             }
-            
-            renderer.drawString(
-                clippedLine,
-                x: bounds.x,
-                y: bounds.y + i,
-                fg: context.fg,
-                bg: context.bg,
-                modifiers: context.modifier
-            )
         }
     }
 

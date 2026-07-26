@@ -33,7 +33,7 @@ public struct TabBar<Content:Component> : Component {
             let title:TextStorage
             if let match = tab.wholeMatch(of: /([^~]*)~([^~])~(.*)/) {
                 hotkey = String(match.2)
-                title = String(match.1).plain + String(match.2).styled(.init(foreground: .textSecondary, background: .transparent, modifier: [])) + String(match.3).plain
+                title = String(match.1).plain + String(match.2).styled(.init(foreground: .accent, background: .transparent, modifier: [.bold])) + String(match.3).plain
             } else {
                 hotkey = nil
                 title = tab.plain

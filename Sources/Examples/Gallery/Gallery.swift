@@ -27,7 +27,7 @@ public struct KeyboardEntry : Component {
                 case 1:
                     VStack {
                         Spacer()
-                        Text("Second Tab")
+                        Text("Second Tab").attribute(modifier:.bold)
                         Spacer()
                     }
                 case 2:

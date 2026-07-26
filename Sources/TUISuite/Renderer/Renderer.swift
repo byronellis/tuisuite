@@ -47,6 +47,11 @@ public struct Color : Sendable {
         }
     }
     
+    public func terminal(_ color:TerminalColor) -> TerminalColor {
+        let t = self.terminal
+        return t == .transparent ? color : t        
+    }
+    
     public static func ansi(_ color: TerminalColor) -> Color {
         return Color(storage:.concrete(color))
     }
