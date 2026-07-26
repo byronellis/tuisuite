@@ -61,7 +61,7 @@ public struct TabBar<Content:Component> : Component {
         if child.1 is DummyTabContent {
             //If there's no tab context we'll render ourselves as just the tab. Not that the tab size rendering is horizontal so only
             //considers the horizontal space not the vertical space required for the top and bottom of the tab bar.
-            return Size(minWidth: tabSize.minWidth, idealWidth: tabSize.idealWidth, maxWidth: tabSize.maxWidth,
+            return Size(minWidth: tabSize.minWidth, idealWidth: tabSize.idealWidth, maxWidth: nil,
                         minHeight: tabSize.minHeight+2, idealHeight: tabSize.idealHeight+2, maxHeight: tabSize.maxHeight.map({ $0+2 }))
         }
         if child.1 is ComponentContainer {
@@ -108,110 +108,76 @@ public struct TabBar<Content:Component> : Component {
             tab.render(renderer: renderer, bounds: bounds, context: context)
             tabBounds[i] = bounds
         }
-        
-        
-        /*
-        var offsetX = bounds.x+1
-        for (i,tab) in tabs.enumerated() {
-            let tabWidth = cache.value[i]
-            renderer.drawString(i == 0 ? style.topLeft : (i < tabs.count) ? style.topMiddle : style.topRight, x: offsetX, y: bounds.y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-            renderer.drawString(style.vertical,x:offsetX,y:bounds.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-            renderer.drawString(style.bottomMiddle,x:offsetX,y:maxY,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-            let tabBounds = Rect(x: offsetX+1, y: bounds.y+1, width: bounds.width-(offsetX+1), height: bounds.height)
-            context.push("tab_\(i)")
-            Context.SharedActivePathTracker.withPath(context.currentId) {
-                tab.render(renderer: renderer, bounds: tabBounds, context: context)
-            }
-            context.pop()
-            for x in 0..<(tabWidth.1-1) {
-                renderer.drawString(style.horizontal,x:offsetX+x+1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers: context.modifier)
-            }
-            offsetX += tabWidth.0+1
-            // TODO: Compute appropriate truncations if text elements are too large
-        }
-        renderer.drawString(style.topRight, x: offsetX, y: bounds.y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        renderer.drawString(style.vertical, x: offsetX, y: bounds.y+1, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        renderer.drawString(style.bottomMiddle, x: offsetX, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        */
-        
+
         let child: (Int,Content) =
         Context.SharedActivePathTracker.withPath(activeKey) {
             let selected = selectedTab.wrappedValue
-/*            offsetX = cache.value[selected].1
-            for x in 0..<cache.value[selected].0 {
-                renderer.drawString(" ", x: offsetX+x, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-            }
-            renderer.drawString(style.bottomRight, x: offsetX, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-            renderer.drawString(style.bottomLeft, x: offsetX+cache.value[selected].0, y: maxY, fg: context.fg, bg: context.bg, modifiers: context.modifier)  */
             return (selected,self.content(selected))
         }
-        
-        if child.1 is DummyTabContent {
-            return
-        }
-        // The tab header consumes three rows and the outer border consumes one
-        // final row. Keep both the content and every border cell in bounds.
-        let childBounds = Rect(x: bounds.x + 1, y: bounds.y + 3,
-                               width: max(0, bounds.width - 2),
-                               height: max(0, bounds.height - 4))
-
-        let bottomY = bounds.y + bounds.height - 1
-        let rightX = bounds.x + bounds.width - 1
-        for x in childBounds.x..<(childBounds.x + childBounds.width) {
-            renderer.drawString(style.horizontal, x: x, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        }
-        for y in childBounds.y..<(childBounds.y + childBounds.height) {
-            renderer.drawString(style.vertical, x: bounds.x, y: y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-            renderer.drawString(style.vertical, x: rightX, y: y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        }
-        renderer.drawString(style.topLeft, x: bounds.x, y: bounds.y + 2, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        renderer.drawString(style.topRight, x: rightX, y: bounds.y + 2, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        renderer.drawString(style.bottomLeft, x: bounds.x, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-        renderer.drawString(style.bottomRight, x: rightX, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
-
-        context.push("t_\(child.0)")
-        Context.SharedActivePathTracker.withPath(context.currentId) {
-            child.1.render(renderer: renderer, bounds: childBounds, context: context)
-        }
-        context.pop()
-        
         // Draw the tab borders now that the child borders have all been drawn. Run this in selected tab context
         // so we can alter the drawing to account for the tab
-        Context.SharedActivePathTracker.withPath(activeKey) {
-            let selected = selectedTab.wrappedValue
-
-            if let end = tabBounds.last {
-                renderer.drawString(style.topRight,x:end.x+end.width,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                renderer.drawString(style.vertical,x:end.x+end.width,y:end.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                renderer.drawString(style.bottomMiddle,x:end.x+end.width,y:end.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        let selected = child.0
+        if !(child.1 is DummyTabContent) {
+            // The tab header consumes three rows and the outer border consumes one
+            // final row. Keep both the content and every border cell in bounds.
+            let childBounds = Rect(x: bounds.x + 1, y: bounds.y + 3,
+                                   width: max(0, bounds.width - 2),
+                                   height: max(0, bounds.height - 4))
+            
+            let bottomY = bounds.y + bounds.height - 1
+            let rightX = bounds.x + bounds.width - 1
+            for x in childBounds.x..<(childBounds.x + childBounds.width) {
+                renderer.drawString(style.horizontal, x: x, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
             }
-
-            for (i,b) in tabBounds.enumerated() {
-                renderer.drawString(i == 0 ? style.topLeft : style.topMiddle,x:b.x-1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                renderer.drawString(style.vertical, x:b.x-1,y:b.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                if(i == 0) {
-                    renderer.drawString(bounds.height > 3 ? style.leftT : style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                } else {
-                    renderer.drawString(style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                }
-                for x in 0..<b.width {
-                    renderer.drawString(style.horizontal,x:b.x+x,y:b.y-1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
-                }
+            for y in childBounds.y..<(childBounds.y + childBounds.height) {
+                renderer.drawString(style.vertical, x: bounds.x, y: y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+                renderer.drawString(style.vertical, x: rightX, y: y, fg: context.fg, bg: context.bg, modifiers: context.modifier)
             }
+            renderer.drawString(style.topLeft, x: bounds.x, y: bounds.y + 2, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+            renderer.drawString(style.topRight, x: rightX, y: bounds.y + 2, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+            renderer.drawString(style.bottomLeft, x: bounds.x, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+            renderer.drawString(style.bottomRight, x: rightX, y: bottomY, fg: context.fg, bg: context.bg, modifiers: context.modifier)
+            
+            context.push("t_\(child.0)")
+            Context.SharedActivePathTracker.withPath(context.currentId) {
+                child.1.render(renderer: renderer, bounds: childBounds, context: context)
+            }
+            context.pop()
+        }
+        
+        // Render tab over border
+        if let end = tabBounds.last {
+            renderer.drawString(style.topRight,x:end.x+end.width,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            renderer.drawString(style.vertical,x:end.x+end.width,y:end.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            renderer.drawString(style.bottomMiddle,x:end.x+end.width,y:end.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        }
 
-            // Update the rendering for the selected tab
-            let b = tabBounds[selected]
-            //Left Side
-            if(selected == 0) {
-                renderer.drawString(bounds.height > 3 ? style.vertical : style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        for (i,b) in tabBounds.enumerated() {
+            renderer.drawString(style.vertical, x:b.x-1,y:b.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+            if(i == 0) {
+                renderer.drawString(style.topLeft,x:b.x-1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(bounds.height > 3 ? style.leftT : style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
             } else {
-                renderer.drawString(style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.topMiddle,x:b.x-1,y:bounds.y,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.bottomMiddle,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
             }
-            //Right Side
-            renderer.drawString(style.bottomLeft,x:b.x+b.width,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
             for x in 0..<b.width {
-                renderer.drawString(" ",x:b.x+x,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+                renderer.drawString(style.horizontal,x:b.x+x,y:b.y-1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
             }
+        }
+
+        // Update the rendering for the selected tab
+        let b = tabBounds[selected]
+        //Left Side
+        if(selected == 0) {
+            renderer.drawString(bounds.height > 3 ? style.vertical : style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        } else {
+            renderer.drawString(style.bottomRight,x:b.x-1,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        }
+        //Right Side
+        renderer.drawString((bounds.height > 3 && b.x+b.width == bounds.width) ? style.vertical : style.bottomLeft,x:b.x+b.width,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
+        for x in 0..<b.width {
+            renderer.drawString(" ",x:b.x+x,y:b.y+1,fg:context.fg,bg:context.bg,modifiers:context.modifier)
         }
 
         

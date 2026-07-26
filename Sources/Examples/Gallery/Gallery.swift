@@ -3,7 +3,8 @@ import TUISuite
 
 public struct KeyboardEntry : Component {
     
-    @State var tab: Int = 0
+    @State var tab: Int = 3
+    @State var subtab: Int = 0
     @State var key: String = "Key: None"
     
     public var body : some Component {
@@ -35,6 +36,13 @@ public struct KeyboardEntry : Component {
                         Spacer()
                         Text("Third Tab")
                         Spacer()
+                    }
+                case 3:
+                    VStack {
+                        TabBar(["One","Two","Three"],selected:$subtab)
+                        HStack {
+                            Spacer()
+                        }
                     }
                 default:
                     Spacer()
