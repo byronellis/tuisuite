@@ -50,7 +50,6 @@ public struct List<Data: RandomAccessCollection, Content: Component>: Component 
             return
         }
         
-        let id = context.currentId
         var activeScroll = scrollState.wrappedValue
         context.onEvent { event in
             switch event {
@@ -78,7 +77,7 @@ public struct List<Data: RandomAccessCollection, Content: Component>: Component 
         }
         
         var currentY = bounds.y
-        var viewportMaxY = bounds.y + bounds.height
+        let viewportMaxY = bounds.y + bounds.height
         
         let startIdx = max(0,min(activeScroll.topVisibleIndex,data.count-1))
         let arr = Array(data)

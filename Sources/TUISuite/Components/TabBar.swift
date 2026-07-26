@@ -27,7 +27,6 @@ public struct TabBar<Content:Component> : Component {
         var hotkeys: [String?] = []
         var tabWidths: [(width:Int,offset:Int)] = []
         
-        var offset = 1
         for tab in tabs {
             let hotkey:String?
             let title:TextStorage
