@@ -218,9 +218,16 @@ public struct TabBar<Content:Component> : Component {
         
         context.onEvent { event in
             return Context.SharedActivePathTracker.withPath(activeKey) {
-                if case let .mouse(button, action, x, y, _) = event, button == .left,action == .press, x >= bounds.x, x < bounds.x + bounds.width, y >= bounds.y, y < bounds.y + bounds.height {
-                    //TODO: Check the real tab rects
-                    return false
+                if case let .mouse(button, action, x, y, _) = event, button == .left,action == .press, x >= bounds.x, x < bounds.x + bounds.width, y >= bounds.y, y < bounds.y + 3 {
+                    // Check to see if we've got a hit in the tab bar
+                    for (i,b) in tabBounds.enumerated() {
+                        if x >= b.x && x < b.x+b.width {
+                            selectedTab.wrappedValue = i
+                            break
+                        }
+                    }
+                    // Always handle mouse events in the tab bar regardless of hit
+                    return true
                 } else if case let .key(key, modifiers) = event, key == .left && modifiers.isEmpty {
                     selectedTab.wrappedValue = max(0,selectedTab.wrappedValue - 1)
                     return true
